@@ -1,0 +1,23 @@
+# Local SDK / IDE
+/local.properties
+.idea/
+*.iml
+
+# Signing secrets (never commit)
+/keystore.properties
+*.jks
+*.keystore
+foxplayer-release.jks
+
+# Build artifacts
+.gradle/
+.kotlin/
+/build
+/app/build
+*.apk
+*.ap_
+*.aab
+/captures
+.externalNativeBuild
+.cxx
+.DS_Store
