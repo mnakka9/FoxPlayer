@@ -104,6 +104,7 @@ fun BookDetailScreen(
     val speed = if (live) player.speed else 1f
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
@@ -111,6 +112,7 @@ fun BookDetailScreen(
                         book?.title ?: "FoxPlayer",
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleLarge,
                     )
                 },
                 navigationIcon = {
@@ -130,67 +132,77 @@ fun BookDetailScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                ),
+                shape = MaterialTheme.shapes.extraLarge,
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             ) {
-                CoverArt(
-                    title = book?.title.orEmpty(),
-                    coverPath = book?.coverPath,
-                    revoked = book?.accessRevoked == true,
-                    modifier = Modifier
-                        .size(96.dp)
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(12.dp)),
-                )
-                Spacer(Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        currentChapter?.displayName ?: "No chapters",
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    val author = book?.author
-                    if (!author.isNullOrBlank()) {
-                        Text(
-                            author,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.tertiary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CoverArt(
+                            title = book?.title.orEmpty(),
+                            coverPath = book?.coverPath,
+                            revoked = book?.accessRevoked == true,
+                            modifier = Modifier
+                                .size(108.dp)
+                                .aspectRatio(1f)
+                                .clip(MaterialTheme.shapes.large),
                         )
+                        Spacer(Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                currentChapter?.displayName ?: "No chapters",
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            val author = book?.author
+                            if (!author.isNullOrBlank()) {
+                                Text(
+                                    author,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            Text(
+                                "${chapters.size} chapters",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
-                    Text(
-                        "${chapters.size} chapters",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+
+                    if (book?.accessRevoked == true) {
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(onClick = onRestoreAccess, modifier = Modifier.fillMaxWidth()) {
+                            Text("Folder access lost — pick folder again")
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+                    PlayerSlider(
+                        positionMs = positionMs,
+                        durationMs = durationMs,
+                        onSeek = viewModel::seekTo,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    PlayerControls(
+                        isPlaying = isPlaying,
+                        speed = speed,
+                        onPlayPause = viewModel::playPause,
+                        onBack = viewModel::seekBack,
+                        onForward = viewModel::seekForward,
+                        onSpeed = viewModel::setSpeed,
                     )
                 }
             }
-
-            if (book?.accessRevoked == true) {
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(onClick = onRestoreAccess, modifier = Modifier.fillMaxWidth()) {
-                    Text("Folder access lost — pick folder again")
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-            PlayerSlider(
-                positionMs = positionMs,
-                durationMs = durationMs,
-                onSeek = viewModel::seekTo,
-            )
-            Spacer(Modifier.height(8.dp))
-            PlayerControls(
-                isPlaying = isPlaying,
-                speed = speed,
-                onPlayPause = viewModel::playPause,
-                onBack = viewModel::seekBack,
-                onForward = viewModel::seekForward,
-                onSpeed = viewModel::setSpeed,
-            )
             Spacer(Modifier.height(12.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),

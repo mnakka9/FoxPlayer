@@ -1,6 +1,5 @@
 package mn.blazeapps.foxplayer.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -10,7 +9,6 @@ import androidx.compose.ui.graphics.Color
 private val FoxBlue = Color(0xFF2563EB)
 private val FoxBlueBright = Color(0xFF3B82F6)
 private val FoxOrange = Color(0xFFF97316)
-private val FoxOrangeSoft = Color(0xFFFB923C)
 private val FoxViolet = Color(0xFF7C3AED)
 private val FoxVioletSoft = Color(0xFF8B5CF6)
 
@@ -33,7 +31,13 @@ private val DarkColors = darkColorScheme(
     onSurface = Color(0xFFF1F5F9),
     surfaceVariant = Color(0xFF1E293B),
     onSurfaceVariant = Color(0xFF94A3B8),
+    surfaceContainerLowest = Color(0xFF080E18),
+    surfaceContainerLow = Color(0xFF0F172A),
+    surfaceContainer = Color(0xFF152033),
+    surfaceContainerHigh = Color(0xFF1B2940),
+    surfaceContainerHighest = Color(0xFF243049),
     outline = Color(0xFF334155),
+    outlineVariant = Color(0xFF1E293B),
     error = Color(0xFFF87171),
     onError = Color(0xFF1F2937),
 )
@@ -51,13 +55,19 @@ private val LightColors = lightColorScheme(
     onTertiary = Color.White,
     tertiaryContainer = Color(0xFFEDE9FE),
     onTertiaryContainer = Color(0xFF4C1D95),
-    background = Color(0xFFF8FAFC),
+    background = Color(0xFFF4F6FB),
     onBackground = Color(0xFF0F172A),
-    surface = Color.White,
+    surface = Color(0xFFF4F6FB),
     onSurface = Color(0xFF0F172A),
-    surfaceVariant = Color(0xFFEFF6FF),
+    surfaceVariant = Color(0xFFE8EEF8),
     onSurfaceVariant = Color(0xFF475569),
+    surfaceContainerLowest = Color.White,
+    surfaceContainerLow = Color(0xFFF8FAFC),
+    surfaceContainer = Color(0xFFEEF2F7),
+    surfaceContainerHigh = Color(0xFFE7EDF6),
+    surfaceContainerHighest = Color(0xFFDEE6F2),
     outline = Color(0xFFCBD5E1),
+    outlineVariant = Color(0xFFE2E8F0),
     error = Color(0xFFDC2626),
     onError = Color.White,
 )
@@ -67,14 +77,15 @@ fun FoxPlayerTheme(
     themeMode: ThemeMode,
     content: @Composable () -> Unit,
 ) {
-    val darkTheme = when (themeMode) {
-        ThemeMode.DARK -> true
-        ThemeMode.LIGHT -> false
+    val colorScheme = when (themeMode) {
+        ThemeMode.DARK -> DarkColors
+        ThemeMode.LIGHT -> LightColors
     }
-    val colorScheme = if (darkTheme) DarkColors else LightColors
 
     MaterialTheme(
         colorScheme = colorScheme,
+        typography = FoxTypography,
+        shapes = FoxShapes,
         content = content,
     )
 }

@@ -12,6 +12,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,7 +50,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeMode by app.container.themePreferences.mode.collectAsStateWithLifecycle()
             FoxPlayerTheme(themeMode = themeMode) {
-                Surface(modifier = Modifier.fillMaxSize()) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
                     val openBookId by pendingBookId.collectAsStateWithLifecycle()
                     FoxPlayerNav(
                         libraryViewModel = libraryViewModel,
