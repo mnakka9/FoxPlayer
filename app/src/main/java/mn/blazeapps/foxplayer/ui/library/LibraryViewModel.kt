@@ -4,15 +4,16 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import mn.blazeapps.foxplayer.FoxPlayerApplication
-import mn.blazeapps.foxplayer.data.ImportException
-import mn.blazeapps.foxplayer.data.LibraryBook
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import mn.blazeapps.foxplayer.FoxPlayerApplication
+import mn.blazeapps.foxplayer.data.ImportException
+import mn.blazeapps.foxplayer.data.LibraryBook
 
 class LibraryViewModel(application: Application) : AndroidViewModel(application) {
     private val container = (application as FoxPlayerApplication).container
@@ -20,6 +21,20 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
 
     val books: StateFlow<List<LibraryBook>> = repository.observeLibrary()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _filter = MutableStateFlow(LibraryFilter.ALL)
+    val filter: StateFlow<LibraryFilter> = _filter.asStateFlow()
+
+    val visibleBooks: StateFlow<List<LibraryBook>> = combine(
+        books,
+        _searchQuery,
+        _filter,
+    ) { list, query, selectedFilter ->
+        list.filterLibrary(query, selectedFilter)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
@@ -31,6 +46,14 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             repository.refreshAccessFlags()
         }
+    }
+
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
+    fun setFilter(filter: LibraryFilter) {
+        _filter.value = filter
     }
 
     fun importFolder(uri: Uri, rebindBookId: Long? = null) {
