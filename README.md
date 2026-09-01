@@ -55,4 +55,4 @@ Release APKs are written to `app/build/outputs/apk/release/`.
 
 ## License
 
-BSD 3-Clause License — see [LICENSE](LICENSE).
+AGPL 3.0 License — see [LICENSE](LICENSE).
