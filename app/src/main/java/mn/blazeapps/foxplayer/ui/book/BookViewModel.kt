@@ -107,6 +107,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun jumpToBookmark(bookmark: BookmarkEntity) {
+        pane.value = DetailPane.Chapters
         viewModelScope.launch {
             ensureThisBookLoaded(autoPlay = false)
             playback.jumpToChapterId(bookmark.chapterId, bookmark.positionMs)
