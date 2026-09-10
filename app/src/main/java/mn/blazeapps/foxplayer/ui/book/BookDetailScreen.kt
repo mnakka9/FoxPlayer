@@ -22,18 +22,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay30
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
@@ -58,7 +61,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -90,6 +95,10 @@ fun BookDetailScreen(
     val pane by viewModel.pane.collectAsStateWithLifecycle()
     var showBookmarkDialog by remember { mutableStateOf(false) }
     var bookmarkNote by remember { mutableStateOf("") }
+    var showEditGenresDialog by remember { mutableStateOf(false) }
+    var editGenresText by remember { mutableStateOf("") }
+    var isDetectingGenres by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     val live = player.bookId == bookId
     val activeChapterId = if (live) player.chapterId else book?.lastChapterId
@@ -118,6 +127,14 @@ fun BookDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = {
+                        editGenresText = book?.genres.orEmpty()
+                        showEditGenresDialog = true
+                    }) {
+                        Icon(Icons.AutoMirrored.Filled.Label, contentDescription = "Edit genres")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -176,6 +193,17 @@ fun BookDetailScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            val genres = book?.genres
+                            if (!genres.isNullOrBlank()) {
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    genres,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
                     }
 
@@ -212,7 +240,7 @@ fun BookDetailScreen(
                     selected = pane == DetailPane.Chapters,
                     onClick = { viewModel.setPane(DetailPane.Chapters) },
                     label = { Text("Chapters") },
-                    leadingIcon = { Icon(Icons.Default.List, contentDescription = null) },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
                 )
                 FilterChip(
                     selected = pane == DetailPane.Bookmarks,
@@ -271,6 +299,65 @@ fun BookDetailScreen(
             },
         )
     }
+
+    if (showEditGenresDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditGenresDialog = false },
+            title = { Text("Edit genres") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Enter comma-separated genres for this audiobook (e.g. Fantasy, Sci-Fi).",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = editGenresText,
+                        onValueChange = { editGenresText = it },
+                        label = { Text("Genres") },
+                        placeholder = { Text("Sci-Fi, Fantasy") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    isDetectingGenres = true
+                                    val detected = viewModel.autoDetectGenres()
+                                    if (!detected.isNullOrBlank()) {
+                                        editGenresText = detected
+                                    }
+                                    isDetectingGenres = false
+                                }
+                            },
+                            enabled = !isDetectingGenres,
+                        ) {
+                            if (isDetectingGenres) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
+                            Text("Auto-detect from web")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.updateGenres(editGenresText)
+                        showEditGenresDialog = false
+                    },
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditGenresDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
 }
 
 @Composable
@@ -312,7 +399,6 @@ private fun PlayerControls(
     onForward: () -> Unit,
     onSpeed: (Float) -> Unit,
 ) {
-    val speeds = listOf(0.8f, 1.0f, 1.2f, 1.5f, 2.0f)
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -335,15 +421,89 @@ private fun PlayerControls(
                 Icon(Icons.Default.Forward30, contentDescription = "Forward 30 seconds", modifier = Modifier.size(32.dp))
             }
         }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            speeds.forEach { value ->
-                FilterChip(
-                    selected = kotlin.math.abs(speed - value) < 0.05f,
-                    onClick = { onSpeed(value) },
-                    label = { Text("${value}x") },
+        Spacer(Modifier.height(12.dp))
+        SpeedSlider(
+            speed = speed,
+            onSpeed = onSpeed,
+        )
+    }
+}
+
+@Composable
+private fun SpeedSlider(
+    speed: Float,
+    onSpeed: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var dragging by remember { mutableFloatStateOf(-1f) }
+    val current = if (dragging > 0f) dragging else speed
+    val formattedSpeed = String.format(java.util.Locale.US, "%.2fx", current)
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    Icons.Default.Speed,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = "Speed",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            TextButton(
+                onClick = {
+                    dragging = -1f
+                    onSpeed(1.0f)
+                },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = formattedSpeed,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (kotlin.math.abs(current - 1.0f) < 0.04f) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.tertiary
+                    },
+                )
+            }
+        }
+        Slider(
+            value = current.coerceIn(0.5f, 2.5f),
+            onValueChange = { raw ->
+                val stepped = (kotlin.math.round(raw * 20f) / 20f).coerceIn(0.5f, 2.5f)
+                dragging = stepped
+                onSpeed(stepped)
+            },
+            onValueChangeFinished = {
+                if (dragging > 0f) {
+                    onSpeed(dragging)
+                }
+                dragging = -1f
+            },
+            valueRange = 0.5f..2.5f,
+            steps = 39,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("0.5x", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("1.0x", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("2.5x", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

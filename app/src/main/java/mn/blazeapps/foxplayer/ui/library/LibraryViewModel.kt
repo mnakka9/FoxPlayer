@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import mn.blazeapps.foxplayer.FoxPlayerApplication
@@ -28,12 +29,22 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     private val _filter = MutableStateFlow(LibraryFilter.ALL)
     val filter: StateFlow<LibraryFilter> = _filter.asStateFlow()
 
+    private val _selectedGenre = MutableStateFlow<String?>(null)
+    val selectedGenre: StateFlow<String?> = _selectedGenre.asStateFlow()
+
+    val availableGenres: StateFlow<List<String>> = books.map { bookList ->
+        bookList.flatMap { parseGenres(it.book.genres) }
+            .distinctBy { it.lowercase() }
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     val visibleBooks: StateFlow<List<LibraryBook>> = combine(
         books,
         _searchQuery,
         _filter,
-    ) { list, query, selectedFilter ->
-        list.filterLibrary(query, selectedFilter)
+        _selectedGenre,
+    ) { list, query, selectedFilter, genre ->
+        list.filterLibrary(query, selectedFilter, genre)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _message = MutableStateFlow<String?>(null)
@@ -54,6 +65,16 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
 
     fun setFilter(filter: LibraryFilter) {
         _filter.value = filter
+    }
+
+    fun setSelectedGenre(genre: String?) {
+        _selectedGenre.value = if (_selectedGenre.value.equals(genre, ignoreCase = true)) null else genre
+    }
+
+    fun updateBookGenres(bookId: Long, genres: String) {
+        viewModelScope.launch {
+            repository.updateGenres(bookId, genres)
+        }
     }
 
     fun importFolder(uri: Uri, rebindBookId: Long? = null) {

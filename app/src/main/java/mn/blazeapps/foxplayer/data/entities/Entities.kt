@@ -10,6 +10,7 @@ data class BookEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
     val author: String? = null,
+    val genres: String? = null,
     val treeUri: String,
     val coverPath: String? = null,
     val lastChapterId: Long? = null,

@@ -81,8 +81,22 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setSpeed(speed: Float) {
-        if (!isCurrentBook()) return
-        playback.setSpeed(speed)
+        viewModelScope.launch {
+            ensureThisBookLoaded(autoPlay = false)
+            playback.setSpeed(speed)
+        }
+    }
+
+    fun updateGenres(genres: String) {
+        val id = bookId.value ?: return
+        viewModelScope.launch {
+            repository.updateGenres(id, genres)
+        }
+    }
+
+    suspend fun autoDetectGenres(): String? {
+        val currentBook = book.value ?: return null
+        return repository.fetchOnlineGenre(currentBook.title, currentBook.author)
     }
 
     fun jumpToChapter(index: Int) {

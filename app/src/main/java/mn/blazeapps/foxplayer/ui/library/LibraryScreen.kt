@@ -26,13 +26,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.AlertDialog
@@ -97,6 +97,8 @@ fun LibraryScreen(
     val visibleBooks by viewModel.visibleBooks.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val filter by viewModel.filter.collectAsStateWithLifecycle()
+    val selectedGenre by viewModel.selectedGenre.collectAsStateWithLifecycle()
+    val availableGenres by viewModel.availableGenres.collectAsStateWithLifecycle()
     val importing by viewModel.importing.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -122,7 +124,7 @@ fun LibraryScreen(
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                librarySubtitle(books.size, visibleBooks.size, searchQuery, filter),
+                                librarySubtitle(books.size, visibleBooks.size, searchQuery, filter, selectedGenre),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -148,8 +150,11 @@ fun LibraryScreen(
                     LibraryControls(
                         query = searchQuery,
                         filter = filter,
+                        selectedGenre = selectedGenre,
+                        availableGenres = availableGenres,
                         onQueryChange = viewModel::setSearchQuery,
                         onFilterChange = viewModel::setFilter,
+                        onGenreChange = viewModel::setSelectedGenre,
                         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
                     )
                 }
@@ -180,6 +185,7 @@ fun LibraryScreen(
                         EmptySearchResults(
                             query = searchQuery,
                             filter = filter,
+                            selectedGenre = selectedGenre,
                             modifier = Modifier.align(Alignment.Center),
                         )
                     } else {
@@ -276,8 +282,9 @@ private fun librarySubtitle(
     visible: Int,
     query: String,
     filter: LibraryFilter,
+    selectedGenre: String? = null,
 ): String {
-    val searching = query.isNotBlank() || filter != LibraryFilter.ALL
+    val searching = query.isNotBlank() || filter != LibraryFilter.ALL || !selectedGenre.isNullOrBlank()
     return if (searching) {
         "$visible of $total books"
     } else {
@@ -289,21 +296,24 @@ private fun librarySubtitle(
 private fun LibraryControls(
     query: String,
     filter: LibraryFilter,
+    selectedGenre: String?,
+    availableGenres: List<String>,
     onQueryChange: (String) -> Unit,
     onFilterChange: (LibraryFilter) -> Unit,
+    onGenreChange: (String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         TextField(
             value = query,
             onValueChange = onQueryChange,
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search titles, authors, chapters") },
+            placeholder = { Text("Search titles, authors, genres, chapters") },
             leadingIcon = {
                 Icon(Icons.Default.Search, contentDescription = "Search library")
             },
@@ -355,6 +365,48 @@ private fun LibraryControls(
                 )
             }
         }
+        if (availableGenres.isNotEmpty()) {
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = selectedGenre == null,
+                    onClick = { onGenreChange(null) },
+                    label = { Text("All Genres") },
+                    leadingIcon = if (selectedGenre == null) {
+                        {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(FilterChipDefaults.IconSize),
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                )
+                availableGenres.forEach { genre ->
+                    val isSelected = selectedGenre.equals(genre, ignoreCase = true)
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onGenreChange(genre) },
+                        label = { Text(genre) },
+                        leadingIcon = if (isSelected) {
+                            {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(FilterChipDefaults.IconSize),
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -372,7 +424,7 @@ private fun EmptyLibrary(modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        EmptyStateIcon(Icons.Default.MenuBook)
+        EmptyStateIcon(Icons.AutoMirrored.Filled.MenuBook)
         Text(
             "Welcome to FoxPlayer",
             style = MaterialTheme.typography.headlineSmall,
@@ -391,6 +443,7 @@ private fun EmptyLibrary(modifier: Modifier = Modifier) {
 private fun EmptySearchResults(
     query: String,
     filter: LibraryFilter,
+    selectedGenre: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -409,10 +462,12 @@ private fun EmptySearchResults(
         val detail = buildString {
             if (query.isNotBlank()) {
                 append("Nothing matches “${query.trim()}”")
+            } else if (!selectedGenre.isNullOrBlank()) {
+                append("Nothing in genre “$selectedGenre”")
             } else {
                 append("Nothing in ${filter.label().lowercase()}")
             }
-            append(". Try another title, author, or chapter name.")
+            append(". Try another title, author, genre, or chapter name.")
         }
         Text(
             detail,
@@ -527,6 +582,17 @@ private fun BookCard(
                         text = item.book.author?.takeIf { it.isNotBlank() } ?: "Unknown author",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                val genres = item.book.genres
+                if (!genres.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = genres,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
