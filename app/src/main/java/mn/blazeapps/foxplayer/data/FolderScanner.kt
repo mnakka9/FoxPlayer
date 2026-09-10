@@ -27,6 +27,7 @@ class FolderScanner(
         val artistTag: String? = null,
         val albumArtistTag: String? = null,
         val genreTag: String? = null,
+        val groupingTag: String? = null,
         val trackNumber: Int? = null,
         val hasEmbeddedCover: Boolean = false,
     )
@@ -61,7 +62,7 @@ class FolderScanner(
         val folderName = tree.name?.ifBlank { null }
         val title = resolveBookTitle(audio, folderName)
         val author = resolveAuthor(audio)
-        val genres = resolveGenres(audio)
+        val genres = resolveGenres(children, audio)
         val embeddedCoverUri = audio.firstOrNull { it.hasEmbeddedCover }?.uri
 
         return ScannedFolder(
@@ -104,6 +105,7 @@ class FolderScanner(
             artistTag = tags.artist,
             albumArtistTag = tags.albumArtist,
             genreTag = tags.genre,
+            groupingTag = tags.grouping,
             trackNumber = tags.trackNumber,
             hasEmbeddedCover = tags.hasEmbeddedCover,
         )
@@ -123,13 +125,64 @@ class FolderScanner(
         return majority(artists)
     }
 
-    private fun resolveGenres(audio: List<ScannedAudio>): String? {
+    private fun resolveGenres(children: Array<DocumentFile>, audio: List<ScannedAudio>): String? {
+        val fileGenres = findGenresFromMetadataFiles(children)
+        if (fileGenres.isNotEmpty()) {
+            return fileGenres.joinToString(", ")
+        }
+
+        val groupingGenres = audio.mapNotNull { it.groupingTag }
+            .flatMap { it.split(',', ';', '/') }
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !GenreExtractor.isGeneric(it) }
+            .distinctBy { it.lowercase() }
+        if (groupingGenres.isNotEmpty()) {
+            return groupingGenres.joinToString(", ")
+        }
+
         val allGenres = audio.mapNotNull { it.genreTag }
             .flatMap { it.split(',', ';', '/') }
             .map { it.trim() }
-            .filter { it.isNotBlank() }
+            .filter { it.isNotBlank() && !GenreExtractor.isGeneric(it) }
             .distinctBy { it.lowercase() }
-        return if (allGenres.isEmpty()) null else allGenres.joinToString(", ")
+        return if (allGenres.isNotEmpty()) allGenres.joinToString(", ") else null
+    }
+
+    private fun findGenresFromMetadataFiles(children: Array<DocumentFile>): List<String> {
+        val metaFile = children.firstOrNull { file ->
+            file.isFile && (file.name.equals("metadata.json", ignoreCase = true) ||
+                file.name.equals("info.json", ignoreCase = true) ||
+                file.name.equals("desc.json", ignoreCase = true) ||
+                file.name?.lowercase()?.endsWith(".opf") == true)
+        } ?: return emptyList()
+
+        return try {
+            val content = context.contentResolver.openInputStream(metaFile.uri)?.bufferedReader()?.use { it.readText() }
+                ?: return emptyList()
+            if (metaFile.name?.lowercase()?.endsWith(".opf") == true) {
+                val regex = Regex("<dc:subject[^>]*>(.*?)</dc:subject>", RegexOption.IGNORE_CASE)
+                val subjects = regex.findAll(content).map { it.groupValues[1].trim() }.filter { it.isNotBlank() && !GenreExtractor.isGeneric(it) }.toList()
+                GenreExtractor.cleanSubjects(subjects)
+            } else {
+                val json = org.json.JSONObject(content)
+                val genresArr = json.optJSONArray("genres") ?: json.optJSONArray("tags")
+                val list = mutableListOf<String>()
+                if (genresArr != null) {
+                    for (i in 0 until genresArr.length()) {
+                        val g = genresArr.optString(i)
+                        if (!g.isNullOrBlank() && !GenreExtractor.isGeneric(g)) list += g
+                    }
+                } else {
+                    val genreStr = json.optString("genre").takeIf { it.isNotBlank() }
+                    if (!genreStr.isNullOrBlank() && !GenreExtractor.isGeneric(genreStr)) {
+                        list += genreStr.split(',', ';').map { it.trim() }.filter { it.isNotEmpty() && !GenreExtractor.isGeneric(it) }
+                    }
+                }
+                list.distinctBy { it.lowercase() }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     private fun majority(values: List<String>): String? {

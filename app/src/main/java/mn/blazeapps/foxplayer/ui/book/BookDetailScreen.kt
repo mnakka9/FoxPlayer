@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
@@ -60,7 +61,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -94,6 +97,8 @@ fun BookDetailScreen(
     var bookmarkNote by remember { mutableStateOf("") }
     var showEditGenresDialog by remember { mutableStateOf(false) }
     var editGenresText by remember { mutableStateOf("") }
+    var isDetectingGenres by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     val live = player.bookId == bookId
     val activeChapterId = if (live) player.chapterId else book?.lastChapterId
@@ -314,6 +319,30 @@ fun BookDetailScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    isDetectingGenres = true
+                                    val detected = viewModel.autoDetectGenres()
+                                    if (!detected.isNullOrBlank()) {
+                                        editGenresText = detected
+                                    }
+                                    isDetectingGenres = false
+                                }
+                            },
+                            enabled = !isDetectingGenres,
+                        ) {
+                            if (isDetectingGenres) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
+                            Text("Auto-detect from web")
+                        }
+                    }
                 }
             },
             confirmButton = {

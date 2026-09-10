@@ -17,6 +17,7 @@ class AudiobookRepository(
     db: AudiobookDatabase,
     private val scanner: FolderScanner,
     private val covers: CoverResolver,
+    private val onlineResolver: OnlineGenreResolver = OnlineGenreResolver(),
 ) {
     private val books = db.bookDao()
     private val chapters = db.chapterDao()
@@ -51,12 +52,23 @@ class AudiobookRepository(
             rebindBookId != null -> books.getBook(rebindBookId)
             else -> books.getBookByTreeUri(treeUri.toString())
         }
+
+        var resolvedGenres = scanned.genres
+        if (resolvedGenres.isNullOrBlank() || GenreExtractor.isGeneric(resolvedGenres)) {
+            val online = onlineResolver.resolveOnline(scanned.title, scanned.author)
+            if (!online.isNullOrBlank()) {
+                resolvedGenres = online
+            }
+        }
+
+        val bookGenres = existing?.genres?.takeIf { !GenreExtractor.isGeneric(it) } ?: resolvedGenres
+
         val bookId = if (existing != null) {
             books.update(
                 existing.copy(
                     title = scanned.title,
                     author = scanned.author,
-                    genres = existing.genres ?: scanned.genres,
+                    genres = bookGenres,
                     treeUri = treeUri.toString(),
                     accessRevoked = false,
                 ),
@@ -67,7 +79,7 @@ class AudiobookRepository(
                 BookEntity(
                     title = scanned.title,
                     author = scanned.author,
-                    genres = scanned.genres,
+                    genres = bookGenres,
                     treeUri = treeUri.toString(),
                 ),
             )
@@ -168,7 +180,27 @@ class AudiobookRepository(
                 books.setAccessRevoked(book.id, !readable)
             }
         }
+        refreshGenericGenres()
     }
+
+    suspend fun refreshGenericGenres() = withContext(Dispatchers.IO) {
+        val allBooks = books.getAllBooks()
+        for (book in allBooks) {
+            val current = book.genres
+            if (current.isNullOrBlank() || GenreExtractor.isGeneric(current)) {
+                val resolved = onlineResolver.resolveOnline(book.title, book.author)
+                if (!resolved.isNullOrBlank()) {
+                    books.updateGenres(book.id, resolved)
+                } else if (!current.isNullOrBlank() && GenreExtractor.isGeneric(current)) {
+                    // Clear the generic "Audiobook" so it doesn't pollute the filter
+                    books.updateGenres(book.id, null)
+                }
+            }
+        }
+    }
+
+    suspend fun fetchOnlineGenre(title: String, author: String?): String? =
+        onlineResolver.resolveOnline(title, author)
 
     suspend fun saveProgress(bookId: Long, chapterId: Long, positionMs: Long) {
         books.updateProgress(bookId, chapterId, positionMs.coerceAtLeast(0), System.currentTimeMillis())
@@ -192,7 +224,7 @@ class AudiobookRepository(
     suspend fun updateGenres(bookId: Long, genres: String?) = withContext(Dispatchers.IO) {
         val cleaned = genres?.split(',')
             ?.map { it.trim() }
-            ?.filter { it.isNotEmpty() }
+            ?.filter { it.isNotEmpty() && !GenreExtractor.isGeneric(it) }
             ?.distinctBy { it.lowercase() }
             ?.joinToString(", ")
             ?.takeIf { it.isNotBlank() }

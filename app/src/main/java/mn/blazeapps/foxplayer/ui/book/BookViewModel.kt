@@ -94,6 +94,11 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    suspend fun autoDetectGenres(): String? {
+        val currentBook = book.value ?: return null
+        return repository.fetchOnlineGenre(currentBook.title, currentBook.author)
+    }
+
     fun jumpToChapter(index: Int) {
         viewModelScope.launch {
             ensureThisBookLoaded(autoPlay = false)
