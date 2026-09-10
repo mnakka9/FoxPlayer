@@ -15,6 +15,7 @@ class AudioMetadataReader(private val context: Context) {
         val album: String? = null,
         val artist: String? = null,
         val albumArtist: String? = null,
+        val genre: String? = null,
         val trackNumber: Int? = null,
         val durationMs: Long = 0L,
         val hasEmbeddedCover: Boolean = false,
@@ -28,6 +29,7 @@ class AudioMetadataReader(private val context: Context) {
             val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM).clean()
             val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST).clean()
             val albumArtist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST).clean()
+            val genre = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE).clean()
             val track = parseTrack(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER))
             val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull()
@@ -43,6 +45,7 @@ class AudioMetadataReader(private val context: Context) {
                 album = album,
                 artist = artist,
                 albumArtist = albumArtist,
+                genre = genre,
                 trackNumber = track,
                 durationMs = duration,
                 hasEmbeddedCover = hasCover,

@@ -12,6 +12,7 @@ class LibrarySearchTest {
         id = 1,
         title = "Dune",
         author = "Frank Herbert",
+        genres = "Sci-Fi, Adventure",
         progressChapter = 1,
         progressMs = 20_000,
         chapters = listOf("Chapter 1", "Arrakis"),
@@ -20,12 +21,14 @@ class LibrarySearchTest {
         id = 2,
         title = "Project Hail Mary",
         author = "Andy Weir",
+        genres = "Sci-Fi",
         chapters = listOf("Prologue", "Chapter 1"),
     )
     private val finished = book(
         id = 3,
         title = "The Hobbit",
         author = "J.R.R. Tolkien",
+        genres = "Fantasy",
         progressChapter = 2,
         progressMs = 60_000,
         chapters = listOf("An Unexpected Party", "Riddles in the Dark"),
@@ -46,6 +49,12 @@ class LibrarySearchTest {
     }
 
     @Test
+    fun searchMatchesGenre() {
+        assertEquals(listOf(finished), library.filterLibrary("fantasy", LibraryFilter.ALL))
+        assertEquals(listOf(dune, newBook), library.filterLibrary("sci-fi", LibraryFilter.ALL))
+    }
+
+    @Test
     fun searchIsCaseInsensitiveAndTrimsWhitespace() {
         assertEquals(listOf(finished), library.filterLibrary("  HOBBIT  ", LibraryFilter.ALL))
     }
@@ -58,9 +67,37 @@ class LibrarySearchTest {
     }
 
     @Test
+    fun filtersByGenre() {
+        assertEquals(listOf(finished), library.filterLibrary("", LibraryFilter.ALL, "Fantasy"))
+        assertEquals(listOf(dune, newBook), library.filterLibrary("", LibraryFilter.ALL, "Sci-Fi"))
+        assertEquals(listOf(dune), library.filterLibrary("", LibraryFilter.ALL, "Adventure"))
+        assertEquals(library, library.filterLibrary("", LibraryFilter.ALL, "All"))
+        assertEquals(library, library.filterLibrary("", LibraryFilter.ALL, null))
+    }
+
+    @Test
+    fun filtersByGenreCaseInsensitiveAndTrimmed() {
+        assertEquals(listOf(finished), library.filterLibrary("", LibraryFilter.ALL, "  fantasy  "))
+    }
+
+    @Test
     fun searchAndFilterCombine() {
         assertTrue(library.filterLibrary("dune", LibraryFilter.FINISHED).isEmpty())
         assertEquals(listOf(dune), library.filterLibrary("herbert", LibraryFilter.IN_PROGRESS))
+    }
+
+    @Test
+    fun searchFilterAndGenreCombine() {
+        assertEquals(listOf(dune), library.filterLibrary("", LibraryFilter.IN_PROGRESS, "Sci-Fi"))
+        assertTrue(library.filterLibrary("", LibraryFilter.IN_PROGRESS, "Fantasy").isEmpty())
+        assertEquals(listOf(dune), library.filterLibrary("dune", LibraryFilter.IN_PROGRESS, "Sci-Fi"))
+    }
+
+    @Test
+    fun testParseGenres() {
+        assertEquals(listOf("Sci-Fi", "Fantasy", "Space Opera"), parseGenres("Sci-Fi, Fantasy,  Space Opera "))
+        assertTrue(parseGenres(null).isEmpty())
+        assertTrue(parseGenres("   ").isEmpty())
     }
 
     private fun book(
@@ -68,6 +105,7 @@ class LibrarySearchTest {
         title: String,
         author: String,
         chapters: List<String>,
+        genres: String? = null,
         progressChapter: Int? = null,
         progressMs: Long = 0,
         chapterDurationMs: Long = 60_000,
@@ -76,6 +114,7 @@ class LibrarySearchTest {
             id = id,
             title = title,
             author = author,
+            genres = genres,
             treeUri = "content://tree/$id",
             lastChapterId = progressChapter?.toLong(),
             lastPositionMs = progressMs,

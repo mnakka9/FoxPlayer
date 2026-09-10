@@ -12,6 +12,7 @@ class FolderScanner(
     data class ScannedFolder(
         val title: String,
         val author: String?,
+        val genres: String?,
         val audioFiles: List<ScannedAudio>,
         val coverUri: Uri?,
         val embeddedCoverUri: Uri?,
@@ -25,6 +26,7 @@ class FolderScanner(
         val albumTag: String? = null,
         val artistTag: String? = null,
         val albumArtistTag: String? = null,
+        val genreTag: String? = null,
         val trackNumber: Int? = null,
         val hasEmbeddedCover: Boolean = false,
     )
@@ -59,11 +61,13 @@ class FolderScanner(
         val folderName = tree.name?.ifBlank { null }
         val title = resolveBookTitle(audio, folderName)
         val author = resolveAuthor(audio)
+        val genres = resolveGenres(audio)
         val embeddedCoverUri = audio.firstOrNull { it.hasEmbeddedCover }?.uri
 
         return ScannedFolder(
             title = title,
             author = author,
+            genres = genres,
             audioFiles = audio,
             coverUri = cover,
             embeddedCoverUri = embeddedCoverUri,
@@ -99,6 +103,7 @@ class FolderScanner(
             albumTag = tags.album,
             artistTag = tags.artist,
             albumArtistTag = tags.albumArtist,
+            genreTag = tags.genre,
             trackNumber = tags.trackNumber,
             hasEmbeddedCover = tags.hasEmbeddedCover,
         )
@@ -116,6 +121,15 @@ class FolderScanner(
         majority(albumArtists)?.let { return it }
         val artists = audio.mapNotNull { it.artistTag }.filter { it.isNotBlank() }
         return majority(artists)
+    }
+
+    private fun resolveGenres(audio: List<ScannedAudio>): String? {
+        val allGenres = audio.mapNotNull { it.genreTag }
+            .flatMap { it.split(',', ';', '/') }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+        return if (allGenres.isEmpty()) null else allGenres.joinToString(", ")
     }
 
     private fun majority(values: List<String>): String? {

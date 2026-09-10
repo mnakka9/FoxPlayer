@@ -51,6 +51,9 @@ interface BookDao {
     @Query("UPDATE books SET treeUri = :treeUri, accessRevoked = 0, title = :title WHERE id = :bookId")
     suspend fun rebindFolder(bookId: Long, treeUri: String, title: String)
 
+    @Query("UPDATE books SET genres = :genres WHERE id = :bookId")
+    suspend fun updateGenres(bookId: Long, genres: String?)
+
     @Query("DELETE FROM books WHERE id = :bookId")
     suspend fun deleteById(bookId: Long)
 }

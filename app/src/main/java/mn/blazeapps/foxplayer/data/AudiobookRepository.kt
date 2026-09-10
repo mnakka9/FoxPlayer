@@ -56,6 +56,7 @@ class AudiobookRepository(
                 existing.copy(
                     title = scanned.title,
                     author = scanned.author,
+                    genres = existing.genres ?: scanned.genres,
                     treeUri = treeUri.toString(),
                     accessRevoked = false,
                 ),
@@ -66,6 +67,7 @@ class AudiobookRepository(
                 BookEntity(
                     title = scanned.title,
                     author = scanned.author,
+                    genres = scanned.genres,
                     treeUri = treeUri.toString(),
                 ),
             )
@@ -185,6 +187,16 @@ class AudiobookRepository(
 
     suspend fun deleteBookmark(bookmark: BookmarkEntity) {
         bookmarks.delete(bookmark)
+    }
+
+    suspend fun updateGenres(bookId: Long, genres: String?) = withContext(Dispatchers.IO) {
+        val cleaned = genres?.split(',')
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.distinctBy { it.lowercase() }
+            ?.joinToString(", ")
+            ?.takeIf { it.isNotBlank() }
+        books.updateGenres(bookId, cleaned)
     }
 
     private fun persistReadPermission(treeUri: Uri) {
