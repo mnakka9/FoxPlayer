@@ -4,18 +4,21 @@ A lightweight Android audiobook player for local audio libraries. Pick a folder 
 
 ## Screenshots
 
-### Dark mode:
-<img width="1080" height="2400" alt="Bookmarks" src="https://github.com/user-attachments/assets/2286e11a-f592-446a-b511-1f1c7fbe66ea" />
-<img width="1080" height="2400" alt="DarkMode" src="https://github.com/user-attachments/assets/960ce220-d039-438f-9409-91ab2836e7c1" />
-<img width="1080" height="2400" alt="Player" src="https://github.com/user-attachments/assets/2fa0c597-03c0-41d8-b02b-f065e7294759" />
-<img width="779" height="1731" alt="Library" src="https://github.com/user-attachments/assets/c2773dd2-7ebd-42cb-a5a8-22266b6cb374" />
+<div align="center">
+  <marquee behavior="alternate" direction="left" scrollamount="8" width="100%">
+    <img width="260" alt="Bookmarks" src="https://github.com/user-attachments/assets/2286e11a-f592-446a-b511-1f1c7fbe66ea" />
+    <img width="260" alt="DarkMode" src="https://github.com/user-attachments/assets/960ce220-d039-438f-9409-91ab2836e7c1" />
+    <img width="260" alt="Player" src="https://github.com/user-attachments/assets/2fa0c597-03c0-41d8-b02b-f065e7294759" />
+    <img width="220" alt="Library" src="https://github.com/user-attachments/assets/c2773dd2-7ebd-42cb-a5a8-22266b6cb374" />
+  </marquee>
+</div>
 
-### Light mode:
-<img width="718" height="1531" alt="L4" src="https://github.com/user-attachments/assets/125e7b81-eb76-446d-baef-6cdf7aec67be" />
-<img width="1080" height="2400" alt="L1" src="https://github.com/user-attachments/assets/48f878fc-b273-4b6d-be4f-16b552016100" />
-<img width="1080" height="2400" alt="L2" src="https://github.com/user-attachments/assets/add01cde-249e-477b-9013-cd083b55486f" />
-<img width="1080" height="2400" alt="L3" src="https://github.com/user-attachments/assets/7d25b9b2-c163-405c-a21d-7eb852d9be37" />
-
+<p align="center">
+  <img width="220" alt="Library" src="https://github.com/user-attachments/assets/c2773dd2-7ebd-42cb-a5a8-22266b6cb374" />
+  <img width="220" alt="Player" src="https://github.com/user-attachments/assets/2fa0c597-03c0-41d8-b02b-f065e7294759" />
+  <img width="220" alt="Bookmarks" src="https://github.com/user-attachments/assets/2286e11a-f592-446a-b511-1f1c7fbe66ea" />
+  <img width="220" alt="DarkMode" src="https://github.com/user-attachments/assets/960ce220-d039-438f-9409-91ab2836e7c1" />
+</p>
 
 ## Features
 
