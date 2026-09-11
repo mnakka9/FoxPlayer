@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -104,6 +105,7 @@ fun BookDetailScreen(
     val activeChapterId = if (live) player.chapterId else book?.lastChapterId
     val currentChapter = chapters.firstOrNull { it.id == activeChapterId }
         ?: chapters.getOrNull(if (live) player.currentIndex else 0)
+    val chapterListState = rememberLazyListState()
     val positionMs = if (live) player.positionMs else book?.lastPositionMs ?: 0L
     val durationMs = when {
         live && player.durationMs > 0 -> player.durationMs
@@ -111,6 +113,15 @@ fun BookDetailScreen(
     }
     val isPlaying = live && player.isPlaying
     val speed = if (live) player.speed else 1f
+
+    LaunchedEffect(pane, activeChapterId, chapters) {
+        if (pane != DetailPane.Chapters) return@LaunchedEffect
+        val chapterIndex = activeChapterId
+            ?.let { targetId -> chapters.indexOfFirst { it.id == targetId } }
+            ?.takeIf { it >= 0 }
+            ?: return@LaunchedEffect
+        chapterListState.animateScrollToItem(chapterIndex)
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -259,6 +270,7 @@ fun BookDetailScreen(
                     chapters = chapters,
                     currentChapterId = activeChapterId,
                     onSelect = viewModel::jumpToChapter,
+                    listState = chapterListState,
                     modifier = Modifier.weight(1f),
                 )
             } else {
@@ -513,9 +525,11 @@ private fun ChapterList(
     chapters: List<ChapterEntity>,
     currentChapterId: Long?,
     onSelect: (Int) -> Unit,
+    listState: androidx.compose.foundation.lazy.LazyListState,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
+        state = listState,
         modifier = modifier,
         contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
