@@ -4,21 +4,88 @@ A lightweight Android audiobook player for local audio libraries. Pick a folder 
 
 ## Screenshots
 
+### App preview
+
 <div align="center">
-  <marquee behavior="alternate" direction="left" scrollamount="8" width="100%">
-    <img width="260" alt="Bookmarks" src="https://github.com/user-attachments/assets/2286e11a-f592-446a-b511-1f1c7fbe66ea" />
-    <img width="260" alt="DarkMode" src="https://github.com/user-attachments/assets/960ce220-d039-438f-9409-91ab2836e7c1" />
-    <img width="260" alt="Player" src="https://github.com/user-attachments/assets/2fa0c597-03c0-41d8-b02b-f065e7294759" />
-    <img width="220" alt="Library" src="https://github.com/user-attachments/assets/c2773dd2-7ebd-42cb-a5a8-22266b6cb374" />
+  <table>
+    <tr>
+      <td align="center" width="25%">
+        <img src="screens/Library.png" alt="Library" width="190" />
+        <br />
+        <strong>Library</strong>
+      </td>
+      <td align="center" width="25%">
+        <img src="screens/Player.png" alt="Player" width="190" />
+        <br />
+        <strong>Player</strong>
+      </td>
+      <td align="center" width="25%">
+        <img src="screens/Bookmarks.png" alt="Bookmarks" width="190" />
+        <br />
+        <strong>Bookmarks</strong>
+      </td>
+      <td align="center" width="25%">
+        <img src="screens/DarkMode.png" alt="Dark mode" width="190" />
+        <br />
+        <strong>Dark mode</strong>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<div align="center">
+  <marquee behavior="scroll" direction="left" scrollamount="5" loop="infinite" width="92%">
+    <img src="screens/Library.png" alt="Library" width="190" />
+    &nbsp;&nbsp;&nbsp;
+    <img src="screens/Player.png" alt="Player" width="190" />
+    &nbsp;&nbsp;&nbsp;
+    <img src="screens/Bookmarks.png" alt="Bookmarks" width="190" />
+    &nbsp;&nbsp;&nbsp;
+    <img src="screens/DarkMode.png" alt="Dark mode" width="190" />
+    &nbsp;&nbsp;&nbsp;
+    <img src="screens/Library.png" alt="Library" width="190" />
+    &nbsp;&nbsp;&nbsp;
+    <img src="screens/Player.png" alt="Player" width="190" />
   </marquee>
 </div>
 
-<p align="center">
-  <img width="220" alt="Library" src="https://github.com/user-attachments/assets/c2773dd2-7ebd-42cb-a5a8-22266b6cb374" />
-  <img width="220" alt="Player" src="https://github.com/user-attachments/assets/2fa0c597-03c0-41d8-b02b-f065e7294759" />
-  <img width="220" alt="Bookmarks" src="https://github.com/user-attachments/assets/2286e11a-f592-446a-b511-1f1c7fbe66ea" />
-  <img width="220" alt="DarkMode" src="https://github.com/user-attachments/assets/960ce220-d039-438f-9409-91ab2836e7c1" />
-</p>
+### Light screenshots
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center">
+        <img src="screens/Library.png" alt="Library light theme" width="240" />
+        <br />
+        <strong>Library</strong>
+      </td>
+      <td align="center">
+        <img src="screens/Player.png" alt="Player light theme" width="240" />
+        <br />
+        <strong>Player</strong>
+      </td>
+      <td align="center">
+        <img src="screens/Bookmarks.png" alt="Bookmarks light theme" width="240" />
+        <br />
+        <strong>Bookmarks</strong>
+      </td>
+    </tr>
+  </table>
+</div>
+
+### Dark mode
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center">
+        <img src="screens/DarkMode.png" alt="Dark mode" width="260" />
+        <br />
+        <strong>Dark mode</strong>
+      </td>
+    </tr>
+  </table>
+</div>
 
 ## Features
 
