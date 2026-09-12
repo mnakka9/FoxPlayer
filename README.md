@@ -4,84 +4,68 @@ A lightweight Android audiobook player for local audio libraries. Pick a folder 
 
 ## Screenshots
 
-### App preview
+### Library
 
 <div align="center">
   <table>
     <tr>
-      <td align="center" width="25%">
-        <img src="screens/Library.png" alt="Library" width="190" />
+      <td align="center">
+        <img src="screens/Library.png" alt="Library in dark theme" width="240" />
         <br />
-        <strong>Library</strong>
+        <strong>Dark theme</strong>
       </td>
-      <td align="center" width="25%">
-        <img src="screens/Player.png" alt="Player" width="190" />
+      <td align="center">
+        <img src="screens/Player.png" alt="Library in light theme" width="240" />
         <br />
-        <strong>Player</strong>
-      </td>
-      <td align="center" width="25%">
-        <img src="screens/Bookmarks.png" alt="Bookmarks" width="190" />
-        <br />
-        <strong>Bookmarks</strong>
-      </td>
-      <td align="center" width="25%">
-        <img src="screens/DarkMode.png" alt="Dark mode" width="190" />
-        <br />
-        <strong>Dark mode</strong>
+        <strong>Light theme</strong>
       </td>
     </tr>
   </table>
 </div>
 
-<div align="center">
-  <marquee behavior="scroll" direction="left" scrollamount="5" loop="infinite" width="92%">
-    <img src="screens/Library.png" alt="Library" width="190" />
-    &nbsp;&nbsp;&nbsp;
-    <img src="screens/Player.png" alt="Player" width="190" />
-    &nbsp;&nbsp;&nbsp;
-    <img src="screens/Bookmarks.png" alt="Bookmarks" width="190" />
-    &nbsp;&nbsp;&nbsp;
-    <img src="screens/DarkMode.png" alt="Dark mode" width="190" />
-    &nbsp;&nbsp;&nbsp;
-    <img src="screens/Library.png" alt="Library" width="190" />
-    &nbsp;&nbsp;&nbsp;
-    <img src="screens/Player.png" alt="Player" width="190" />
-  </marquee>
-</div>
-
-### Light screenshots
+### Player and bookmarks
 
 <div align="center">
   <table>
     <tr>
       <td align="center">
-        <img src="screens/Library.png" alt="Library light theme" width="240" />
+        <img src="screens/Bookmarks.png" alt="Player chapters in light theme" width="190" />
         <br />
-        <strong>Library</strong>
+        <strong>Chapters</strong>
       </td>
       <td align="center">
-        <img src="screens/Player.png" alt="Player light theme" width="240" />
+        <img src="screens/PlayerChaptersDark.png" alt="Player chapters in dark theme" width="190" />
         <br />
-        <strong>Player</strong>
+        <strong>Dark chapters</strong>
       </td>
       <td align="center">
-        <img src="screens/Bookmarks.png" alt="Bookmarks light theme" width="240" />
+        <img src="screens/DarkMode.png" alt="Player bookmarks in dark theme" width="190" />
         <br />
-        <strong>Bookmarks</strong>
+        <strong>Dark bookmarks</strong>
+      </td>
+      <td align="center">
+        <img src="screens/PlayerBookmarksLight.png" alt="Player bookmarks in light theme" width="190" />
+        <br />
+        <strong>Light bookmarks</strong>
       </td>
     </tr>
   </table>
 </div>
 
-### Dark mode
+### Adding a bookmark
 
 <div align="center">
   <table>
     <tr>
       <td align="center">
-        <img src="screens/DarkMode.png" alt="Dark mode" width="260" />
+        <img src="screens/BookmarkDialogLight.png" alt="Add bookmark dialog in light theme" width="220" />
         <br />
-        <strong>Dark mode</strong>
+        <strong>Light theme</strong>
+      </td>
+      <td align="center">
+        <img src="screens/BookmarkDialogDark.png" alt="Add bookmark dialog in dark theme" width="220" />
+        <br />
+        <strong>Dark theme</strong>
       </td>
     </tr>
   </table>
