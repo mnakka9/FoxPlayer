@@ -15,7 +15,7 @@ A lightweight Android audiobook player for local audio libraries. Pick a folder 
         <strong>Dark theme</strong>
       </td>
       <td align="center">
-        <img src="screens/Player.png" alt="Library in light theme" width="240" />
+        <img src="screens/LibraryLight.png" alt="Library in light theme" width="240" />
         <br />
         <strong>Light theme</strong>
       </td>
@@ -29,17 +29,17 @@ A lightweight Android audiobook player for local audio libraries. Pick a folder 
   <table>
     <tr>
       <td align="center">
-        <img src="screens/Bookmarks.png" alt="Player chapters in light theme" width="190" />
+        <img src="screens/PlayerLight.png" alt="Player chapters in light theme" width="190" />
         <br />
         <strong>Chapters</strong>
       </td>
       <td align="center">
-        <img src="screens/PlayerChaptersDark.png" alt="Player chapters in dark theme" width="190" />
+        <img src="screens/Player.png" alt="Player chapters in dark theme" width="190" />
         <br />
         <strong>Dark chapters</strong>
       </td>
       <td align="center">
-        <img src="screens/DarkMode.png" alt="Player bookmarks in dark theme" width="190" />
+        <img src="screens/Bookmarks.png" alt="Player bookmarks in dark theme" width="190" />
         <br />
         <strong>Dark bookmarks</strong>
       </td>
@@ -47,25 +47,6 @@ A lightweight Android audiobook player for local audio libraries. Pick a folder 
         <img src="screens/PlayerBookmarksLight.png" alt="Player bookmarks in light theme" width="190" />
         <br />
         <strong>Light bookmarks</strong>
-      </td>
-    </tr>
-  </table>
-</div>
-
-### Adding a bookmark
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center">
-        <img src="screens/BookmarkDialogLight.png" alt="Add bookmark dialog in light theme" width="220" />
-        <br />
-        <strong>Light theme</strong>
-      </td>
-      <td align="center">
-        <img src="screens/BookmarkDialogDark.png" alt="Add bookmark dialog in dark theme" width="220" />
-        <br />
-        <strong>Dark theme</strong>
       </td>
     </tr>
   </table>
