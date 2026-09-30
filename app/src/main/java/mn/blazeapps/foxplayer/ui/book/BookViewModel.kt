@@ -99,6 +99,13 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         return repository.fetchOnlineGenre(currentBook.title, currentBook.author)
     }
 
+    fun rescanChapters() {
+        val id = bookId.value ?: return
+        viewModelScope.launch {
+            repository.rescanBookChapters(id)
+        }
+    }
+
     fun jumpToChapter(index: Int) {
         viewModelScope.launch {
             ensureThisBookLoaded(autoPlay = false)

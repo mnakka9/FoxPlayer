@@ -17,9 +17,9 @@ class ThemePreferences(private val context: Context) {
     }
 
     private fun readMode(): ThemeMode {
-        return when (prefs.getString(KEY_THEME, ThemeMode.LIGHT.name)) {
-            ThemeMode.DARK.name -> ThemeMode.DARK
-            else -> ThemeMode.LIGHT
+        return when (prefs.getString(KEY_THEME, ThemeMode.DARK.name)) {
+            ThemeMode.LIGHT.name -> ThemeMode.LIGHT
+            else -> ThemeMode.DARK
         }
     }
 

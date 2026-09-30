@@ -22,6 +22,7 @@ class FolderScanner(
         val displayName: String,
         val uri: Uri,
         val durationMs: Long,
+        val startOffsetMs: Long = 0L,
         val titleTag: String? = null,
         val albumTag: String? = null,
         val artistTag: String? = null,
@@ -84,11 +85,40 @@ class FolderScanner(
         return tree.exists() && tree.canRead()
     }
 
-    private fun scanAudio(file: DocumentFile, parentName: String?): ScannedAudio {
+    private fun scanAudio(file: DocumentFile, parentName: String?): List<ScannedAudio> {
         val name = file.name.orEmpty()
         val base = name.substringBeforeLast('.').ifBlank { name }
         val tags = metadata.read(file.uri, loadCoverHint = true)
         val taggedTitle = tags.title
+
+        // For M4B / M4A files: extract internal chapters if present
+        if (isM4bOrM4a(file)) {
+            val chapters = M4bChapterExtractor.extract(context, file.uri, tags.durationMs)
+            if (chapters.isNotEmpty()) {
+                return chapters.map { chap ->
+                    val display = when {
+                        !parentName.isNullOrBlank() -> "$parentName — ${chap.title}"
+                        else -> chap.title
+                    }
+                    ScannedAudio(
+                        displayName = display,
+                        uri = file.uri,
+                        durationMs = chap.durationMs,
+                        startOffsetMs = chap.startMs,
+                        titleTag = chap.title,
+                        albumTag = tags.album,
+                        artistTag = tags.artist,
+                        albumArtistTag = tags.albumArtist,
+                        genreTag = tags.genre,
+                        groupingTag = tags.grouping,
+                        trackNumber = chap.index + 1,
+                        hasEmbeddedCover = tags.hasEmbeddedCover,
+                    )
+                }
+            }
+        }
+
+        // Standard single-file audio (including MP3 - left untouched)
         val display = when {
             !taggedTitle.isNullOrBlank() && !parentName.isNullOrBlank() ->
                 "$parentName — $taggedTitle"
@@ -96,18 +126,21 @@ class FolderScanner(
             !parentName.isNullOrBlank() -> "$parentName — $base"
             else -> base
         }
-        return ScannedAudio(
-            displayName = display,
-            uri = file.uri,
-            durationMs = tags.durationMs,
-            titleTag = taggedTitle,
-            albumTag = tags.album,
-            artistTag = tags.artist,
-            albumArtistTag = tags.albumArtist,
-            genreTag = tags.genre,
-            groupingTag = tags.grouping,
-            trackNumber = tags.trackNumber,
-            hasEmbeddedCover = tags.hasEmbeddedCover,
+        return listOf(
+            ScannedAudio(
+                displayName = display,
+                uri = file.uri,
+                durationMs = tags.durationMs,
+                startOffsetMs = 0L,
+                titleTag = taggedTitle,
+                albumTag = tags.album,
+                artistTag = tags.artist,
+                albumArtistTag = tags.albumArtist,
+                genreTag = tags.genre,
+                groupingTag = tags.grouping,
+                trackNumber = tags.trackNumber,
+                hasEmbeddedCover = tags.hasEmbeddedCover,
+            ),
         )
     }
 
@@ -193,6 +226,9 @@ class FolderScanner(
 
     private fun chapterComparator(): Comparator<ScannedAudio> =
         Comparator { a, b ->
+            if (a.uri == b.uri && a.startOffsetMs != b.startOffsetMs) {
+                return@Comparator a.startOffsetMs.compareTo(b.startOffsetMs)
+            }
             val trackA = a.trackNumber
             val trackB = b.trackNumber
             when {
@@ -211,6 +247,11 @@ class FolderScanner(
         return children.firstOrNull { file ->
             file.isFile && isImage(file)
         }?.uri
+    }
+
+    private fun isM4bOrM4a(file: DocumentFile): Boolean {
+        val name = file.name?.lowercase().orEmpty()
+        return name.endsWith(".m4b") || name.endsWith(".m4a")
     }
 
     private fun isAudio(file: DocumentFile): Boolean {

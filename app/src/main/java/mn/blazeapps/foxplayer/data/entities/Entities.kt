@@ -36,6 +36,7 @@ data class ChapterEntity(
     val bookId: Long,
     val displayName: String,
     val documentUri: String,
+    val startOffsetMs: Long = 0L,
     val durationMs: Long = 0,
     val sortIndex: Int,
 )

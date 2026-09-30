@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Label
@@ -32,8 +33,17 @@ import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Replay30
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.ui.draw.shadow
+import mn.blazeapps.foxplayer.ui.theme.BgDeep
+import mn.blazeapps.foxplayer.ui.theme.ColorBlueViolet
+import mn.blazeapps.foxplayer.ui.theme.ColorOrange
+import mn.blazeapps.foxplayer.ui.theme.ColorOrangeLight
+import mn.blazeapps.foxplayer.ui.theme.ColorPurple
+import mn.blazeapps.foxplayer.ui.theme.GlassBg
+import mn.blazeapps.foxplayer.ui.theme.GlassBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -123,8 +133,10 @@ fun BookDetailScreen(
         chapterListState.animateScrollToItem(chapterIndex)
     }
 
+    val isDark = MaterialTheme.colorScheme.background == BgDeep
+
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = {
@@ -141,6 +153,9 @@ fun BookDetailScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viewModel.rescanChapters() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Re-scan chapters")
+                    }
                     IconButton(onClick = {
                         editGenresText = book?.genres.orEmpty()
                         showEditGenresDialog = true
@@ -149,7 +164,7 @@ fun BookDetailScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
+                    containerColor = Color.Transparent,
                 ),
             )
         },
@@ -162,9 +177,13 @@ fun BookDetailScreen(
         ) {
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceContainerLowest,
                 ),
-                shape = MaterialTheme.shapes.extraLarge,
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(
+                    1.dp,
+                    if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant,
+                ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -421,10 +440,28 @@ private fun PlayerControls(
                 Icon(Icons.Default.Replay30, contentDescription = "Back 30 seconds", modifier = Modifier.size(32.dp))
             }
             Spacer(Modifier.width(16.dp))
-            FilledIconButton(onClick = onPlayPause, modifier = Modifier.size(64.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .shadow(
+                        elevation = 10.dp,
+                        shape = CircleShape,
+                        spotColor = Color(0x66F97316),
+                        ambientColor = Color(0x33F97316),
+                    )
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(ColorOrange, ColorOrangeLight),
+                        ),
+                    )
+                    .clickable(onClick = onPlayPause),
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
                     if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = if (isPlaying) "Pause" else "Play",
+                    tint = Color.White,
                     modifier = Modifier.size(36.dp),
                 )
             }
@@ -553,17 +590,18 @@ private fun ChapterCard(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    val isDark = MaterialTheme.colorScheme.background == BgDeep
     val gradient = Brush.linearGradient(
         colors = listOf(
-            MaterialTheme.colorScheme.primary,
-            MaterialTheme.colorScheme.tertiary,
+            ColorBlueViolet,
+            ColorPurple,
         ),
     )
     val accentBorder = Brush.linearGradient(
         colors = listOf(
-            MaterialTheme.colorScheme.secondary,
-            MaterialTheme.colorScheme.tertiary,
-            MaterialTheme.colorScheme.primary,
+            ColorOrange,
+            ColorPurple,
+            ColorBlueViolet,
         ),
     )
     Card(
@@ -571,19 +609,23 @@ private fun ChapterCard(
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                ColorBlueViolet.copy(alpha = 0.22f)
+            } else if (isDark) {
+                GlassBg
             } else {
                 MaterialTheme.colorScheme.surfaceVariant
             },
         ),
         elevation = CardDefaults.cardElevation(
-            defaultElevation = if (selected) 6.dp else 2.dp,
+            defaultElevation = if (selected) 6.dp else 0.dp,
         ),
         modifier = Modifier
             .fillMaxWidth()
             .then(
                 if (selected) {
-                    Modifier.border(2.dp, accentBorder, RoundedCornerShape(18.dp))
+                    Modifier.border(1.5.dp, accentBorder, RoundedCornerShape(18.dp))
+                } else if (isDark) {
+                    Modifier.border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(18.dp))
                 } else {
                     Modifier
                 },
@@ -600,7 +642,7 @@ private fun ChapterCard(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(gradient),
+                    .background(if (selected) Brush.linearGradient(listOf(ColorOrange, ColorOrangeLight)) else gradient),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -618,7 +660,7 @@ private fun ChapterCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     color = if (selected) {
-                        MaterialTheme.colorScheme.primary
+                        ColorOrangeLight
                     } else {
                         MaterialTheme.colorScheme.onSurface
                     },
@@ -630,8 +672,13 @@ private fun ChapterCard(
                         .background(MaterialTheme.colorScheme.secondaryContainer)
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
+                    val durationText = if (chapter.startOffsetMs > 0L) {
+                        "${formatDuration(chapter.startOffsetMs)} · ${formatDuration(chapter.durationMs)}"
+                    } else {
+                        formatDuration(chapter.durationMs)
+                    }
                     Text(
-                        formatDuration(chapter.durationMs),
+                        durationText,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
@@ -642,13 +689,13 @@ private fun ChapterCard(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.secondary),
+                        .background(ColorOrange),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         Icons.Default.GraphicEq,
                         contentDescription = "Now playing",
-                        tint = MaterialTheme.colorScheme.onSecondary,
+                        tint = Color.White,
                         modifier = Modifier.size(22.dp),
                     )
                 }
