@@ -93,6 +93,12 @@ import mn.blazeapps.foxplayer.ui.theme.GlassBg
 import mn.blazeapps.foxplayer.ui.theme.GlassBorder
 import mn.blazeapps.foxplayer.ui.theme.InputBg
 import mn.blazeapps.foxplayer.ui.theme.SquircleIconBox
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import mn.blazeapps.foxplayer.ui.theme.ColorRed
+import mn.blazeapps.foxplayer.ui.theme.TextMuted
+import mn.blazeapps.foxplayer.ui.theme.TextPrimary
+import mn.blazeapps.foxplayer.ui.theme.TextSecondary
 import mn.blazeapps.foxplayer.ui.theme.ThemeMode
 import java.io.File
 
@@ -116,6 +122,7 @@ fun LibraryScreen(
     val snackbar = remember { SnackbarHostState() }
     var pendingDelete by remember { mutableStateOf<LibraryBook?>(null) }
     var showThemePicker by remember { mutableStateOf(false) }
+    val isDark = MaterialTheme.colorScheme.background == BgDeep
 
     LaunchedEffect(message) {
         val text = message ?: return@LaunchedEffect
@@ -258,34 +265,58 @@ fun LibraryScreen(
     if (showThemePicker) {
         AlertDialog(
             onDismissRequest = { showThemePicker = false },
+            containerColor = if (isDark) Color(0xF20D1230) else MaterialTheme.colorScheme.surface,
+            titleContentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+            textContentColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.border(
+                BorderStroke(1.dp, if (isDark) GlassBorder else MaterialTheme.colorScheme.outline),
+                RoundedCornerShape(24.dp),
+            ),
             icon = {
                 Icon(
                     if (themeMode == ThemeMode.DARK) Icons.Default.DarkMode else Icons.Default.LightMode,
                     contentDescription = null,
+                    tint = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
                 )
             },
-            title = { Text("Appearance") },
+            title = {
+                Text(
+                    "Appearance",
+                    fontWeight = FontWeight.Bold,
+                    color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+                )
+            },
             text = {
                 Text(
                     "Choose light or dark mode for FoxPlayer.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             },
             confirmButton = {
+                Button(
+                    onClick = {
+                        onThemeModeChange(ThemeMode.DARK)
+                        showThemePicker = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (themeMode == ThemeMode.DARK) ColorOrange else ColorBlueViolet,
+                        contentColor = Color.White,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text("Dark", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
                 TextButton(
                     onClick = {
                         onThemeModeChange(ThemeMode.LIGHT)
                         showThemePicker = false
                     },
-                ) { Text("Light") }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        onThemeModeChange(ThemeMode.DARK)
-                        showThemePicker = false
-                    },
-                ) { Text("Dark") }
+                ) {
+                    Text("Light", color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             },
         )
     }
@@ -293,20 +324,46 @@ fun LibraryScreen(
     pendingDelete?.let { target ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("Remove from library?") },
+            containerColor = if (isDark) Color(0xF20D1230) else MaterialTheme.colorScheme.surface,
+            titleContentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+            textContentColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.border(
+                BorderStroke(1.dp, if (isDark) GlassBorder else MaterialTheme.colorScheme.outline),
+                RoundedCornerShape(24.dp),
+            ),
+            title = {
+                Text(
+                    "Remove from library?",
+                    fontWeight = FontWeight.Bold,
+                    color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+                )
+            },
             text = {
-                Text("“${target.book.title}” will be removed from FoxPlayer. Audio files on disk are not deleted.")
+                Text(
+                    "“${target.book.title}” will be removed from FoxPlayer. Audio files on disk are not deleted.",
+                    color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         viewModel.removeBook(target.book.id)
                         pendingDelete = null
                     },
-                ) { Text("Remove") }
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ColorRed,
+                        contentColor = Color.White,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text("Remove", fontWeight = FontWeight.Bold)
+                }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("Cancel") }
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text("Cancel", color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             },
         )
     }
@@ -341,7 +398,7 @@ private fun LibraryControls(
 ) {
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
-    val isDark = themeMode == ThemeMode.DARK
+    val isDark = MaterialTheme.colorScheme.background == BgDeep
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -362,7 +419,12 @@ private fun LibraryControls(
                 value = query,
                 onValueChange = onQueryChange,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Search titles, authors, genres, chapters") },
+                placeholder = {
+                    Text(
+                        "Search titles, authors, genres, chapters",
+                        color = if (isDark) TextMuted else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
                 leadingIcon = {
                     Icon(
                         Icons.Default.Search,
@@ -373,7 +435,11 @@ private fun LibraryControls(
                 trailingIcon = {
                     if (query.isNotEmpty()) {
                         IconButton(onClick = { onQueryChange("") }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear search")
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Clear search",
+                                tint = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 },
@@ -387,6 +453,11 @@ private fun LibraryControls(
                     },
                 ),
                 colors = TextFieldDefaults.colors(
+                    focusedTextColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                    focusedPlaceholderColor = if (isDark) TextMuted else MaterialTheme.colorScheme.onSurfaceVariant,
+                    unfocusedPlaceholderColor = if (isDark) TextMuted else MaterialTheme.colorScheme.onSurfaceVariant,
+                    cursorColor = ColorOrange,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     disabledIndicatorColor = Color.Transparent,

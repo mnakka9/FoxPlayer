@@ -72,15 +72,22 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                if (themeMode == ThemeMode.DARK) {
-                    GlassBackground {
-                        navContent()
-                    }
-                } else {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.background,
-                    ) {
+                val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+                val isDark = when (themeMode) {
+                    ThemeMode.DARK -> true
+                    ThemeMode.LIGHT -> false
+                    ThemeMode.SYSTEM -> isSystemDark
+                }
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                    contentColor = MaterialTheme.colorScheme.onBackground,
+                ) {
+                    if (isDark) {
+                        GlassBackground {
+                            navContent()
+                        }
+                    } else {
                         navContent()
                     }
                 }

@@ -7,10 +7,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val DarkColors = darkColorScheme(
-    primary = ColorBlueViolet,
+    primary = ColorBlueVioletLight,
     onPrimary = Color.White,
     primaryContainer = ColorBlueVioletDim,
-    onPrimaryContainer = ColorBlueVioletSubtle,
+    onPrimaryContainer = Color.White,
     secondary = ColorOrange,
     onSecondary = Color.White,
     secondaryContainer = ColorOrangeDim,
@@ -21,9 +21,9 @@ private val DarkColors = darkColorScheme(
     onTertiaryContainer = ColorBlueVioletSubtle,
     background = BgDeep,
     onBackground = TextPrimary,
-    surface = BgDeep,
+    surface = BgMid,
     onSurface = TextPrimary,
-    surfaceVariant = GlassBg,
+    surfaceVariant = Color(0xFF161F45),
     onSurfaceVariant = TextSecondary,
     surfaceContainerLowest = BgDeep,
     surfaceContainerLow = BgMid,
@@ -73,10 +73,13 @@ fun FoxPlayerTheme(
     themeMode: ThemeMode = ThemeMode.DARK,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = when (themeMode) {
-        ThemeMode.DARK -> DarkColors
-        ThemeMode.LIGHT -> LightColors
+    val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val isDark = when (themeMode) {
+        ThemeMode.DARK -> true
+        ThemeMode.LIGHT -> false
+        ThemeMode.SYSTEM -> isSystemDark
     }
+    val colorScheme = if (isDark) DarkColors else LightColors
 
     MaterialTheme(
         colorScheme = colorScheme,

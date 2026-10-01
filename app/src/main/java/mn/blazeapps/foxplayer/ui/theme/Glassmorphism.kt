@@ -137,7 +137,9 @@ fun GlassBackground(
                 ),
         )
 
-        content()
+        CompositionLocalProvider(LocalContentColor provides TextPrimary) {
+            content()
+        }
     }
 }
 
