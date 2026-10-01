@@ -6,49 +6,28 @@
 
 ## Screenshots
 
-### Library
-
 <div align="center">
   <table>
     <tr>
       <td align="center">
-        <img src="screens/Library.png" alt="Library in dark theme" width="240" />
+        <img src="screens/Library.png" alt="Library" width="200" />
         <br />
-        <strong>Dark theme</strong>
+        <strong>Library</strong>
       </td>
       <td align="center">
-        <img src="screens/LibraryLight.png" alt="Library in light theme" width="240" />
+        <img src="screens/Player.png" alt="Player & Chapters" width="200" />
         <br />
-        <strong>Light theme</strong>
-      </td>
-    </tr>
-  </table>
-</div>
-
-### Player and bookmarks
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center">
-        <img src="screens/PlayerLight.png" alt="Player chapters in light theme" width="190" />
-        <br />
-        <strong>Chapters</strong>
+        <strong>Player & Chapters</strong>
       </td>
       <td align="center">
-        <img src="screens/Player.png" alt="Player chapters in dark theme" width="190" />
+        <img src="screens/Bookmarks.png" alt="Bookmarks" width="200" />
         <br />
-        <strong>Dark chapters</strong>
+        <strong>Bookmarks</strong>
       </td>
       <td align="center">
-        <img src="screens/Bookmarks.png" alt="Player bookmarks in dark theme" width="190" />
+        <img src="screens/AddBookmark.png" alt="Add Bookmark" width="200" />
         <br />
-        <strong>Dark bookmarks</strong>
-      </td>
-      <td align="center">
-        <img src="screens/PlayerBookmarksLight.png" alt="Player bookmarks in light theme" width="190" />
-        <br />
-        <strong>Light bookmarks</strong>
+        <strong>Add Bookmark</strong>
       </td>
     </tr>
   </table>
