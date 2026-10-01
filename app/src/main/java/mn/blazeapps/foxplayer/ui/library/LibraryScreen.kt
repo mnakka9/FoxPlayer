@@ -2,6 +2,7 @@ package mn.blazeapps.foxplayer.ui.library
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -76,7 +77,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import mn.blazeapps.foxplayer.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -136,20 +139,14 @@ fun LibraryScreen(
             Column(modifier = Modifier.background(Color.Transparent)) {
                 TopAppBar(
                     navigationIcon = {
-                        SquircleIconBox(
-                            size = 38.dp,
-                            shape = RoundedCornerShape(12.dp),
-                            brush = Brush.linearGradient(listOf(ColorBlueViolet, ColorOrange)),
-                            shadowColor = Color(0x666366F1),
-                            modifier = Modifier.padding(start = 12.dp, end = 4.dp),
-                        ) {
-                            Icon(
-                                Icons.Default.Headphones,
-                                contentDescription = "FoxPlayer",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
+                        Image(
+                            painter = painterResource(R.drawable.app_logo),
+                            contentDescription = "FoxPlayer",
+                            modifier = Modifier
+                                .padding(start = 12.dp, end = 4.dp)
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(10.dp)),
+                        )
                     },
                     title = {
                         Column {

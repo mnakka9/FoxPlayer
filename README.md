@@ -1,6 +1,8 @@
-# FoxPlayer
-
-A lightweight Android audiobook player for local audio libraries. Pick a folder on your device—each folder becomes a book, and the audio files inside become chapters.
+<div align="center">
+  <img src="assets/logo.png" alt="FoxPlayer Logo" width="128" />
+  <h1>FoxPlayer</h1>
+  <p>A lightweight Android audiobook player for local audio libraries. Pick a folder on your device—each folder becomes a book, and the audio files inside become chapters.</p>
+</div>
 
 ## Screenshots
 
