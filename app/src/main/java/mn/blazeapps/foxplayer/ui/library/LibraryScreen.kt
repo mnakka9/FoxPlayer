@@ -80,7 +80,25 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.shadow
 import mn.blazeapps.foxplayer.data.LibraryBook
+import mn.blazeapps.foxplayer.ui.theme.BgDeep
+import mn.blazeapps.foxplayer.ui.theme.ColorBlueViolet
+import mn.blazeapps.foxplayer.ui.theme.ColorBlueVioletLight
+import mn.blazeapps.foxplayer.ui.theme.ColorOrange
+import mn.blazeapps.foxplayer.ui.theme.ColorOrangeLight
+import mn.blazeapps.foxplayer.ui.theme.GlassBg
+import mn.blazeapps.foxplayer.ui.theme.GlassBorder
+import mn.blazeapps.foxplayer.ui.theme.InputBg
+import mn.blazeapps.foxplayer.ui.theme.SquircleIconBox
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import mn.blazeapps.foxplayer.ui.theme.ColorRed
+import mn.blazeapps.foxplayer.ui.theme.TextMuted
+import mn.blazeapps.foxplayer.ui.theme.TextPrimary
+import mn.blazeapps.foxplayer.ui.theme.TextSecondary
 import mn.blazeapps.foxplayer.ui.theme.ThemeMode
 import java.io.File
 
@@ -104,6 +122,7 @@ fun LibraryScreen(
     val snackbar = remember { SnackbarHostState() }
     var pendingDelete by remember { mutableStateOf<LibraryBook?>(null) }
     var showThemePicker by remember { mutableStateOf(false) }
+    val isDark = MaterialTheme.colorScheme.background == BgDeep
 
     LaunchedEffect(message) {
         val text = message ?: return@LaunchedEffect
@@ -112,14 +131,30 @@ fun LibraryScreen(
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         topBar = {
-            Column(modifier = Modifier.background(MaterialTheme.colorScheme.background)) {
+            Column(modifier = Modifier.background(Color.Transparent)) {
                 TopAppBar(
+                    navigationIcon = {
+                        SquircleIconBox(
+                            size = 38.dp,
+                            shape = RoundedCornerShape(12.dp),
+                            brush = Brush.linearGradient(listOf(ColorBlueViolet, ColorOrange)),
+                            shadowColor = Color(0x666366F1),
+                            modifier = Modifier.padding(start = 12.dp, end = 4.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Headphones,
+                                contentDescription = "FoxPlayer",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    },
                     title = {
                         Column {
                             Text(
-                                "Library",
+                                "FoxPlayer",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -143,7 +178,7 @@ fun LibraryScreen(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
+                        containerColor = Color.Transparent,
                     ),
                 )
                 if (books.isNotEmpty()) {
@@ -152,6 +187,7 @@ fun LibraryScreen(
                         filter = filter,
                         selectedGenre = selectedGenre,
                         availableGenres = availableGenres,
+                        themeMode = themeMode,
                         onQueryChange = viewModel::setSearchQuery,
                         onFilterChange = viewModel::setFilter,
                         onGenreChange = viewModel::setSelectedGenre,
@@ -164,9 +200,15 @@ fun LibraryScreen(
             ExtendedFloatingActionButton(
                 onClick = onAddFolder,
                 icon = { Icon(Icons.Default.CreateNewFolder, contentDescription = null) },
-                text = { Text("Add book") },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                text = { Text("Add book", fontWeight = FontWeight.Bold) },
+                containerColor = ColorOrange,
+                contentColor = Color.White,
+                modifier = Modifier.shadow(
+                    elevation = 10.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    spotColor = Color(0x66F97316),
+                    ambientColor = Color(0x33F97316),
+                ),
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -223,34 +265,58 @@ fun LibraryScreen(
     if (showThemePicker) {
         AlertDialog(
             onDismissRequest = { showThemePicker = false },
+            containerColor = if (isDark) Color(0xF20D1230) else MaterialTheme.colorScheme.surface,
+            titleContentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+            textContentColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.border(
+                BorderStroke(1.dp, if (isDark) GlassBorder else MaterialTheme.colorScheme.outline),
+                RoundedCornerShape(24.dp),
+            ),
             icon = {
                 Icon(
                     if (themeMode == ThemeMode.DARK) Icons.Default.DarkMode else Icons.Default.LightMode,
                     contentDescription = null,
+                    tint = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
                 )
             },
-            title = { Text("Appearance") },
+            title = {
+                Text(
+                    "Appearance",
+                    fontWeight = FontWeight.Bold,
+                    color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+                )
+            },
             text = {
                 Text(
                     "Choose light or dark mode for FoxPlayer.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             },
             confirmButton = {
+                Button(
+                    onClick = {
+                        onThemeModeChange(ThemeMode.DARK)
+                        showThemePicker = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (themeMode == ThemeMode.DARK) ColorOrange else ColorBlueViolet,
+                        contentColor = Color.White,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text("Dark", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
                 TextButton(
                     onClick = {
                         onThemeModeChange(ThemeMode.LIGHT)
                         showThemePicker = false
                     },
-                ) { Text("Light") }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        onThemeModeChange(ThemeMode.DARK)
-                        showThemePicker = false
-                    },
-                ) { Text("Dark") }
+                ) {
+                    Text("Light", color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             },
         )
     }
@@ -258,20 +324,46 @@ fun LibraryScreen(
     pendingDelete?.let { target ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("Remove from library?") },
+            containerColor = if (isDark) Color(0xF20D1230) else MaterialTheme.colorScheme.surface,
+            titleContentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+            textContentColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.border(
+                BorderStroke(1.dp, if (isDark) GlassBorder else MaterialTheme.colorScheme.outline),
+                RoundedCornerShape(24.dp),
+            ),
+            title = {
+                Text(
+                    "Remove from library?",
+                    fontWeight = FontWeight.Bold,
+                    color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+                )
+            },
             text = {
-                Text("“${target.book.title}” will be removed from FoxPlayer. Audio files on disk are not deleted.")
+                Text(
+                    "“${target.book.title}” will be removed from FoxPlayer. Audio files on disk are not deleted.",
+                    color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         viewModel.removeBook(target.book.id)
                         pendingDelete = null
                     },
-                ) { Text("Remove") }
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ColorRed,
+                        contentColor = Color.White,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text("Remove", fontWeight = FontWeight.Bold)
+                }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("Cancel") }
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text("Cancel", color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             },
         )
     }
@@ -298,6 +390,7 @@ private fun LibraryControls(
     filter: LibraryFilter,
     selectedGenre: String?,
     availableGenres: List<String>,
+    themeMode: ThemeMode,
     onQueryChange: (String) -> Unit,
     onFilterChange: (LibraryFilter) -> Unit,
     onGenreChange: (String?) -> Unit,
@@ -305,42 +398,74 @@ private fun LibraryControls(
 ) {
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val isDark = MaterialTheme.colorScheme.background == BgDeep
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        TextField(
-            value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search titles, authors, genres, chapters") },
-            leadingIcon = {
-                Icon(Icons.Default.Search, contentDescription = "Search library")
-            },
-            trailingIcon = {
-                AnimatedVisibility(visible = query.isNotEmpty()) {
-                    IconButton(onClick = { onQueryChange("") }) {
-                        Icon(Icons.Default.Close, contentDescription = "Clear search")
-                    }
-                }
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(28.dp),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(
-                onSearch = {
-                    keyboard?.hide()
-                    focusManager.clearFocus()
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(28.dp))
+                .then(
+                    if (isDark) {
+                        Modifier.border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(28.dp))
+                    } else {
+                        Modifier
+                    },
+                ),
+        ) {
+            TextField(
+                value = query,
+                onValueChange = onQueryChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = {
+                    Text(
+                        "Search titles, authors, genres, chapters",
+                        color = if (isDark) TextMuted else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 },
-            ),
-            colors = TextFieldDefaults.colors(
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                disabledIndicatorColor = Color.Transparent,
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ),
-        )
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = "Search library",
+                        tint = if (isDark) ColorBlueVioletLight else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { onQueryChange("") }) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Clear search",
+                                tint = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(28.dp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = {
+                        keyboard?.hide()
+                        focusManager.clearFocus()
+                    },
+                ),
+                colors = TextFieldDefaults.colors(
+                    focusedTextColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                    focusedPlaceholderColor = if (isDark) TextMuted else MaterialTheme.colorScheme.onSurfaceVariant,
+                    unfocusedPlaceholderColor = if (isDark) TextMuted else MaterialTheme.colorScheme.onSurfaceVariant,
+                    cursorColor = ColorOrange,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                    focusedContainerColor = if (isDark) InputBg else MaterialTheme.colorScheme.surfaceContainerHighest,
+                    unfocusedContainerColor = if (isDark) InputBg else MaterialTheme.colorScheme.surfaceContainerHigh,
+                ),
+            )
+        }
         Row(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -504,12 +629,17 @@ private fun BookCard(
     onLongClick: () -> Unit,
 ) {
     val percent = item.progressPercent
-    val shape = MaterialTheme.shapes.large
+    val shape = RoundedCornerShape(18.dp)
+    val isDark = MaterialTheme.colorScheme.background == BgDeep
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+            containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceContainerLowest,
         ),
         shape = shape,
+        border = BorderStroke(
+            1.dp,
+            if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant,
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {

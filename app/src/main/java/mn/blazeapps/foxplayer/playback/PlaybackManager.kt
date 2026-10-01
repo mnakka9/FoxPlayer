@@ -61,15 +61,16 @@ class PlaybackManager(
 
     suspend fun playBook(book: BookEntity, chapters: List<ChapterEntity>, autoPlay: Boolean = true) {
         val mediaController = awaitController() ?: return
+        val hasMultiChaptersInSameFile = chapters.groupBy { it.documentUri }.any { it.value.size > 1 }
         val items = chapters.map { chapter ->
-            MediaItem.Builder()
+            val builder = MediaItem.Builder()
                 .setMediaId(mediaId(book.id, chapter.id))
                 .setUri(Uri.parse(chapter.documentUri))
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(chapter.displayName)
                         .setAlbumTitle(book.title)
-                        .setArtist(book.title)
+                        .setArtist(book.author ?: book.title)
                         .apply {
                             book.coverPath?.let { path ->
                                 val file = File(path)
@@ -84,7 +85,19 @@ class PlaybackManager(
                         )
                         .build(),
                 )
-                .build()
+
+            if (chapter.startOffsetMs > 0L || (hasMultiChaptersInSameFile && chapter.durationMs > 0L)) {
+                val clipBuilder = MediaItem.ClippingConfiguration.Builder()
+                if (chapter.startOffsetMs > 0L) {
+                    clipBuilder.setStartPositionMs(chapter.startOffsetMs)
+                }
+                if (chapter.durationMs > 0L) {
+                    clipBuilder.setEndPositionMs(chapter.startOffsetMs + chapter.durationMs)
+                }
+                builder.setClippingConfiguration(clipBuilder.build())
+            }
+
+            builder.build()
         }
         val startIndex = chapters.indexOfFirst { it.id == book.lastChapterId }.let { index ->
             if (index >= 0) index else 0

@@ -34,6 +34,7 @@ import mn.blazeapps.foxplayer.ui.book.BookViewModel
 import mn.blazeapps.foxplayer.ui.library.LibraryScreen
 import mn.blazeapps.foxplayer.ui.library.LibraryViewModel
 import mn.blazeapps.foxplayer.ui.theme.FoxPlayerTheme
+import mn.blazeapps.foxplayer.ui.theme.GlassBackground
 import mn.blazeapps.foxplayer.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -50,10 +51,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeMode by app.container.themePreferences.mode.collectAsStateWithLifecycle()
             FoxPlayerTheme(themeMode = themeMode) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background,
-                ) {
+                val navContent = @Composable {
                     val openBookId by pendingBookId.collectAsStateWithLifecycle()
                     FoxPlayerNav(
                         libraryViewModel = libraryViewModel,
@@ -72,6 +70,26 @@ class MainActivity : ComponentActivity() {
                         },
                         onRequestNotifications = { requestNotificationPermission() },
                     )
+                }
+
+                val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+                val isDark = when (themeMode) {
+                    ThemeMode.DARK -> true
+                    ThemeMode.LIGHT -> false
+                    ThemeMode.SYSTEM -> isSystemDark
+                }
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                    contentColor = MaterialTheme.colorScheme.onBackground,
+                ) {
+                    if (isDark) {
+                        GlassBackground {
+                            navContent()
+                        }
+                    } else {
+                        navContent()
+                    }
                 }
             }
         }

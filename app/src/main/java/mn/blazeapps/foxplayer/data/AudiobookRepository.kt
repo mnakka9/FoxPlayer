@@ -97,30 +97,46 @@ class AudiobookRepository(
         bookId
     }
 
+    suspend fun rescanBookChapters(bookId: Long): Boolean = withContext(Dispatchers.IO) {
+        val book = books.getBook(bookId) ?: return@withContext false
+        val treeUri = Uri.parse(book.treeUri)
+        if (!scanner.canRead(treeUri)) return@withContext false
+        val scanned = scanner.scan(treeUri)
+        upsertChapters(bookId, scanned.audioFiles, book)
+        true
+    }
+
     private suspend fun upsertChapters(
         bookId: Long,
         audioFiles: List<FolderScanner.ScannedAudio>,
         previousBook: BookEntity?,
     ) {
         val oldChapters = chapters.getChapters(bookId)
-        val oldByUri = oldChapters.associateBy { it.documentUri }
         val newUris = audioFiles.map { it.uri.toString() }.toSet()
         val usedIds = mutableSetOf<Long>()
 
         audioFiles.forEachIndexed { index, file ->
             val uri = file.uri.toString()
-            val existing = oldByUri[uri]
-                ?: oldChapters.firstOrNull { chapter ->
-                    chapter.id !in usedIds &&
-                        chapter.displayName == file.displayName &&
-                        chapter.documentUri !in newUris
-                }
+            val existing = oldChapters.firstOrNull { chapter ->
+                chapter.id !in usedIds &&
+                    chapter.documentUri == uri &&
+                    (chapter.startOffsetMs == file.startOffsetMs || chapter.displayName == file.displayName)
+            } ?: oldChapters.firstOrNull { chapter ->
+                chapter.id !in usedIds &&
+                    chapter.documentUri == uri
+            } ?: oldChapters.firstOrNull { chapter ->
+                chapter.id !in usedIds &&
+                    chapter.displayName == file.displayName &&
+                    chapter.documentUri !in newUris
+            }
+
             if (existing != null) {
                 usedIds += existing.id
                 chapters.update(
                     existing.copy(
                         displayName = file.displayName,
                         documentUri = uri,
+                        startOffsetMs = file.startOffsetMs,
                         durationMs = file.durationMs,
                         sortIndex = index,
                     ),
@@ -131,6 +147,7 @@ class AudiobookRepository(
                         bookId = bookId,
                         displayName = file.displayName,
                         documentUri = uri,
+                        startOffsetMs = file.startOffsetMs,
                         durationMs = file.durationMs,
                         sortIndex = index,
                     ),

@@ -21,32 +21,62 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Replay30
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.style.TextAlign
+import mn.blazeapps.foxplayer.ui.theme.BgDeep
+import mn.blazeapps.foxplayer.ui.theme.BgMid
+import mn.blazeapps.foxplayer.ui.theme.ColorBlueViolet
+import mn.blazeapps.foxplayer.ui.theme.ColorBlueVioletDim
+import mn.blazeapps.foxplayer.ui.theme.ColorBlueVioletLight
+import mn.blazeapps.foxplayer.ui.theme.ColorBlueVioletSubtle
+import mn.blazeapps.foxplayer.ui.theme.ColorOrange
+import mn.blazeapps.foxplayer.ui.theme.ColorOrangeDim
+import mn.blazeapps.foxplayer.ui.theme.ColorOrangeLight
+import mn.blazeapps.foxplayer.ui.theme.ColorPurple
+import mn.blazeapps.foxplayer.ui.theme.ColorRedLight
+import mn.blazeapps.foxplayer.ui.theme.GlassBg
+import mn.blazeapps.foxplayer.ui.theme.GlassBorder
+import mn.blazeapps.foxplayer.ui.theme.GlassIconButton
+import mn.blazeapps.foxplayer.ui.theme.InputBg
+import mn.blazeapps.foxplayer.ui.theme.PillBadge
+import mn.blazeapps.foxplayer.ui.theme.SquircleIconBox
+import mn.blazeapps.foxplayer.ui.theme.TextMuted
+import mn.blazeapps.foxplayer.ui.theme.TextPrimary
+import mn.blazeapps.foxplayer.ui.theme.TextSecondary
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SwipeToDismissBox
@@ -123,8 +153,10 @@ fun BookDetailScreen(
         chapterListState.animateScrollToItem(chapterIndex)
     }
 
+    val isDark = MaterialTheme.colorScheme.background == BgDeep
+
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = {
@@ -133,23 +165,43 @@ fun BookDetailScreen(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viewModel.rescanChapters() }) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Re-scan chapters",
+                            tint = if (isDark) ColorBlueVioletLight else MaterialTheme.colorScheme.primary,
+                        )
+                    }
                     IconButton(onClick = {
                         editGenresText = book?.genres.orEmpty()
                         showEditGenresDialog = true
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.Label, contentDescription = "Edit genres")
+                        Icon(
+                            Icons.AutoMirrored.Filled.Label,
+                            contentDescription = "Edit genres",
+                            tint = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
+                    containerColor = Color.Transparent,
+                    titleContentColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                    actionIconContentColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
             )
         },
@@ -162,9 +214,13 @@ fun BookDetailScreen(
         ) {
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceContainerLowest,
                 ),
-                shape = MaterialTheme.shapes.extraLarge,
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(
+                    1.dp,
+                    if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant,
+                ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -246,22 +302,85 @@ fun BookDetailScreen(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 FilterChip(
                     selected = pane == DetailPane.Chapters,
                     onClick = { viewModel.setPane(DetailPane.Chapters) },
-                    label = { Text("Chapters") },
-                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+                    label = {
+                        Text(
+                            "Chapters",
+                            fontWeight = if (pane == DetailPane.Chapters) FontWeight.Bold else FontWeight.Medium,
+                            color = if (pane == DetailPane.Chapters) Color.White else if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurface,
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.AutoMirrored.Filled.List,
+                            contentDescription = null,
+                            tint = if (pane == DetailPane.Chapters) Color.White else if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurface,
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant,
+                        selectedContainerColor = ColorBlueViolet,
+                        labelColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurface,
+                        selectedLabelColor = Color.White,
+                        iconColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurface,
+                        selectedLeadingIconColor = Color.White,
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = pane == DetailPane.Chapters,
+                        borderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
+                        selectedBorderColor = ColorBlueViolet,
+                    ),
+                    shape = RoundedCornerShape(20.dp),
                 )
                 FilterChip(
                     selected = pane == DetailPane.Bookmarks,
                     onClick = { viewModel.setPane(DetailPane.Bookmarks) },
-                    label = { Text("Bookmarks") },
-                    leadingIcon = { Icon(Icons.Default.Bookmark, contentDescription = null) },
+                    label = {
+                        Text(
+                            "Bookmarks",
+                            fontWeight = if (pane == DetailPane.Bookmarks) FontWeight.Bold else FontWeight.Medium,
+                            color = if (pane == DetailPane.Bookmarks) Color.White else if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurface,
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Bookmark,
+                            contentDescription = null,
+                            tint = if (pane == DetailPane.Bookmarks) Color.White else if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurface,
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant,
+                        selectedContainerColor = ColorBlueViolet,
+                        labelColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurface,
+                        selectedLabelColor = Color.White,
+                        iconColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurface,
+                        selectedLeadingIconColor = Color.White,
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = pane == DetailPane.Bookmarks,
+                        borderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
+                        selectedBorderColor = ColorBlueViolet,
+                    ),
+                    shape = RoundedCornerShape(20.dp),
                 )
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = { showBookmarkDialog = true }) {
-                    Icon(Icons.Default.BookmarkAdd, contentDescription = "Add bookmark")
+                GlassIconButton(
+                    onClick = { showBookmarkDialog = true },
+                    size = 40.dp,
+                    contentColor = ColorOrangeLight,
+                ) {
+                    Icon(
+                        Icons.Default.BookmarkAdd,
+                        contentDescription = "Add bookmark",
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -287,27 +406,92 @@ fun BookDetailScreen(
     if (showBookmarkDialog) {
         AlertDialog(
             onDismissRequest = { showBookmarkDialog = false },
-            title = { Text("Add bookmark") },
+            containerColor = if (isDark) Color(0xF20D1230) else MaterialTheme.colorScheme.surface,
+            titleContentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+            textContentColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.border(
+                BorderStroke(1.dp, if (isDark) GlassBorder else MaterialTheme.colorScheme.outline),
+                RoundedCornerShape(24.dp),
+            ),
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    SquircleIconBox(
+                        size = 38.dp,
+                        brush = Brush.linearGradient(listOf(ColorOrange, ColorOrangeLight)),
+                        shadowColor = Color(0x66F97316),
+                    ) {
+                        Icon(
+                            Icons.Default.BookmarkAdd,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    Text(
+                        "Add Bookmark",
+                        fontWeight = FontWeight.Bold,
+                        color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            },
             text = {
-                OutlinedTextField(
-                    value = bookmarkNote,
-                    onValueChange = { bookmarkNote = it },
-                    label = { Text("Note (optional)") },
-                    singleLine = true,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val positionText = formatDuration(positionMs)
+                    Text(
+                        "Bookmark at ${currentChapter?.displayName ?: "current position"} · $positionText",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    OutlinedTextField(
+                        value = bookmarkNote,
+                        onValueChange = { bookmarkNote = it },
+                        label = { Text("Note (optional)") },
+                        placeholder = { Text("Enter a note...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                            focusedContainerColor = if (isDark) InputBg else MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = if (isDark) InputBg else MaterialTheme.colorScheme.surface,
+                            focusedBorderColor = ColorBlueVioletLight,
+                            unfocusedBorderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
+                            focusedLabelColor = ColorBlueVioletLight,
+                            unfocusedLabelColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            cursorColor = ColorOrange,
+                            focusedPlaceholderColor = if (isDark) TextMuted else MaterialTheme.colorScheme.onSurfaceVariant,
+                            unfocusedPlaceholderColor = if (isDark) TextMuted else MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                    )
+                }
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         viewModel.addBookmark(bookmarkNote)
                         bookmarkNote = ""
                         showBookmarkDialog = false
                         viewModel.setPane(DetailPane.Bookmarks)
                     },
-                ) { Text("Save") }
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ColorOrange,
+                        contentColor = Color.White,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text("Save Bookmark", fontWeight = FontWeight.Bold)
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showBookmarkDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showBookmarkDialog = false }) {
+                    Text("Cancel", color = if (isDark) ColorBlueVioletSubtle else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             },
         )
     }
@@ -315,13 +499,44 @@ fun BookDetailScreen(
     if (showEditGenresDialog) {
         AlertDialog(
             onDismissRequest = { showEditGenresDialog = false },
-            title = { Text("Edit genres") },
+            containerColor = if (isDark) Color(0xF20D1230) else MaterialTheme.colorScheme.surface,
+            titleContentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+            textContentColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.border(
+                BorderStroke(1.dp, if (isDark) GlassBorder else MaterialTheme.colorScheme.outline),
+                RoundedCornerShape(24.dp),
+            ),
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    SquircleIconBox(
+                        size = 38.dp,
+                        brush = Brush.linearGradient(listOf(ColorBlueViolet, ColorPurple)),
+                        shadowColor = Color(0x666366F1),
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Label,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    Text(
+                        "Edit Genres",
+                        fontWeight = FontWeight.Bold,
+                        color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         "Enter comma-separated genres for this audiobook (e.g. Fantasy, Sci-Fi).",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     OutlinedTextField(
                         value = editGenresText,
@@ -330,6 +545,20 @@ fun BookDetailScreen(
                         placeholder = { Text("Sci-Fi, Fantasy") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                            focusedContainerColor = if (isDark) InputBg else MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = if (isDark) InputBg else MaterialTheme.colorScheme.surface,
+                            focusedBorderColor = ColorBlueVioletLight,
+                            unfocusedBorderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
+                            focusedLabelColor = ColorBlueVioletLight,
+                            unfocusedLabelColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            cursorColor = ColorOrange,
+                            focusedPlaceholderColor = if (isDark) TextMuted else MaterialTheme.colorScheme.onSurfaceVariant,
+                            unfocusedPlaceholderColor = if (isDark) TextMuted else MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -349,24 +578,41 @@ fun BookDetailScreen(
                             enabled = !isDetectingGenres,
                         ) {
                             if (isDetectingGenres) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = ColorOrange,
+                                )
                                 Spacer(modifier = Modifier.width(6.dp))
                             }
-                            Text("Auto-detect from web")
+                            Text(
+                                "Auto-detect from web",
+                                color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold,
+                            )
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         viewModel.updateGenres(editGenresText)
                         showEditGenresDialog = false
                     },
-                ) { Text("Save") }
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ColorBlueViolet,
+                        contentColor = Color.White,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text("Save", fontWeight = FontWeight.Bold)
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showEditGenresDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showEditGenresDialog = false }) {
+                    Text("Cancel", color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             },
         )
     }
@@ -411,6 +657,7 @@ private fun PlayerControls(
     onForward: () -> Unit,
     onSpeed: (Float) -> Unit,
 ) {
+    val isDark = MaterialTheme.colorScheme.background == BgDeep
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -418,19 +665,47 @@ private fun PlayerControls(
             modifier = Modifier.fillMaxWidth(),
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Default.Replay30, contentDescription = "Back 30 seconds", modifier = Modifier.size(32.dp))
+                Icon(
+                    Icons.Default.Replay30,
+                    contentDescription = "Back 30 seconds",
+                    modifier = Modifier.size(32.dp),
+                    tint = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                )
             }
             Spacer(Modifier.width(16.dp))
-            FilledIconButton(onClick = onPlayPause, modifier = Modifier.size(64.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .shadow(
+                        elevation = 10.dp,
+                        shape = CircleShape,
+                        spotColor = Color(0x66F97316),
+                        ambientColor = Color(0x33F97316),
+                    )
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(ColorOrange, ColorOrangeLight),
+                        ),
+                    )
+                    .clickable(onClick = onPlayPause),
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
                     if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = if (isPlaying) "Pause" else "Play",
+                    tint = Color.White,
                     modifier = Modifier.size(36.dp),
                 )
             }
             Spacer(Modifier.width(16.dp))
             IconButton(onClick = onForward) {
-                Icon(Icons.Default.Forward30, contentDescription = "Forward 30 seconds", modifier = Modifier.size(32.dp))
+                Icon(
+                    Icons.Default.Forward30,
+                    contentDescription = "Forward 30 seconds",
+                    modifier = Modifier.size(32.dp),
+                    tint = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                )
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -447,6 +722,7 @@ private fun SpeedSlider(
     onSpeed: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isDark = MaterialTheme.colorScheme.background == BgDeep
     var dragging by remember { mutableFloatStateOf(-1f) }
     val current = if (dragging > 0f) dragging else speed
     val formattedSpeed = String.format(java.util.Locale.US, "%.2fx", current)
@@ -465,12 +741,12 @@ private fun SpeedSlider(
                     Icons.Default.Speed,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
                     text = "Speed",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             TextButton(
@@ -485,9 +761,9 @@ private fun SpeedSlider(
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = if (kotlin.math.abs(current - 1.0f) < 0.04f) {
-                        MaterialTheme.colorScheme.primary
+                        if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary
                     } else {
-                        MaterialTheme.colorScheme.tertiary
+                        if (isDark) ColorBlueVioletLight else MaterialTheme.colorScheme.tertiary
                     },
                 )
             }
@@ -513,9 +789,9 @@ private fun SpeedSlider(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("0.5x", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("1.0x", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("2.5x", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("0.5x", style = MaterialTheme.typography.labelSmall, color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("1.0x", style = MaterialTheme.typography.labelSmall, color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("2.5x", style = MaterialTheme.typography.labelSmall, color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -553,17 +829,18 @@ private fun ChapterCard(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    val isDark = MaterialTheme.colorScheme.background == BgDeep
     val gradient = Brush.linearGradient(
         colors = listOf(
-            MaterialTheme.colorScheme.primary,
-            MaterialTheme.colorScheme.tertiary,
+            ColorBlueViolet,
+            ColorPurple,
         ),
     )
     val accentBorder = Brush.linearGradient(
         colors = listOf(
-            MaterialTheme.colorScheme.secondary,
-            MaterialTheme.colorScheme.tertiary,
-            MaterialTheme.colorScheme.primary,
+            ColorOrange,
+            ColorPurple,
+            ColorBlueViolet,
         ),
     )
     Card(
@@ -571,19 +848,23 @@ private fun ChapterCard(
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                ColorBlueViolet.copy(alpha = 0.22f)
+            } else if (isDark) {
+                GlassBg
             } else {
                 MaterialTheme.colorScheme.surfaceVariant
             },
         ),
         elevation = CardDefaults.cardElevation(
-            defaultElevation = if (selected) 6.dp else 2.dp,
+            defaultElevation = if (selected) 6.dp else 0.dp,
         ),
         modifier = Modifier
             .fillMaxWidth()
             .then(
                 if (selected) {
-                    Modifier.border(2.dp, accentBorder, RoundedCornerShape(18.dp))
+                    Modifier.border(1.5.dp, accentBorder, RoundedCornerShape(18.dp))
+                } else if (isDark) {
+                    Modifier.border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(18.dp))
                 } else {
                     Modifier
                 },
@@ -600,7 +881,7 @@ private fun ChapterCard(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(gradient),
+                    .background(if (selected) Brush.linearGradient(listOf(ColorOrange, ColorOrangeLight)) else gradient),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -618,7 +899,7 @@ private fun ChapterCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     color = if (selected) {
-                        MaterialTheme.colorScheme.primary
+                        ColorOrangeLight
                     } else {
                         MaterialTheme.colorScheme.onSurface
                     },
@@ -630,8 +911,13 @@ private fun ChapterCard(
                         .background(MaterialTheme.colorScheme.secondaryContainer)
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
+                    val durationText = if (chapter.startOffsetMs > 0L) {
+                        "${formatDuration(chapter.startOffsetMs)} · ${formatDuration(chapter.durationMs)}"
+                    } else {
+                        formatDuration(chapter.durationMs)
+                    }
                     Text(
-                        formatDuration(chapter.durationMs),
+                        durationText,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
@@ -642,13 +928,13 @@ private fun ChapterCard(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.secondary),
+                        .background(ColorOrange),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         Icons.Default.GraphicEq,
                         contentDescription = "Now playing",
-                        tint = MaterialTheme.colorScheme.onSecondary,
+                        tint = Color.White,
                         modifier = Modifier.size(22.dp),
                     )
                 }
@@ -672,15 +958,55 @@ private fun BookmarkList(
     onDelete: (BookmarkWithChapter) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isDark = MaterialTheme.colorScheme.background == BgDeep
     if (bookmarks.isEmpty()) {
-        Text(
-            "No bookmarks yet. Tap the bookmark button to save your place.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = modifier.padding(top = 12.dp),
-        )
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(vertical = 40.dp, horizontal = 20.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant)
+                        .border(BorderStroke(1.dp, if (isDark) GlassBorder else MaterialTheme.colorScheme.outline), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Default.BookmarkBorder,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Text(
+                    "No Bookmarks Yet",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "Tap the bookmark button above to save your listening spot.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         return
     }
-    LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = 24.dp)) {
+
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         items(bookmarks.size, key = { bookmarks[it].bookmark.id }) { index ->
             val item = bookmarks[index]
             val dismissState = rememberSwipeToDismissBoxState(
@@ -699,6 +1025,7 @@ private fun BookmarkList(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
+                            .clip(RoundedCornerShape(18.dp))
                             .background(MaterialTheme.colorScheme.errorContainer)
                             .padding(horizontal = 20.dp),
                         contentAlignment = Alignment.CenterEnd,
@@ -712,20 +1039,108 @@ private fun BookmarkList(
                 },
                 enableDismissFromStartToEnd = false,
             ) {
-                ListItem(
-                    headlineContent = {
-                        Text(item.chapter?.displayName ?: "Chapter")
-                    },
-                    supportingContent = {
-                        val note = item.bookmark.note
-                        val time = formatDuration(item.bookmark.positionMs)
-                        Text(if (note.isBlank()) time else "$time · $note")
-                    },
-                    modifier = Modifier.clickable { onSelect(item) },
-                    trailingContent = {
-                        TextButton(onClick = { onSelect(item) }) { Text("Go") }
-                    },
-                )
+                Card(
+                    onClick = { onSelect(item) },
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (isDark) {
+                                Modifier.border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(18.dp))
+                            } else {
+                                Modifier
+                            },
+                        ),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(Brush.linearGradient(listOf(ColorPurple, ColorBlueViolet))),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Default.Bookmark,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                item.chapter?.displayName ?: "Chapter",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(if (isDark) ColorBlueVioletDim else MaterialTheme.colorScheme.primaryContainer)
+                                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                                ) {
+                                    Text(
+                                        formatDuration(item.bookmark.positionMs),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isDark) ColorBlueVioletLight else MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                                if (item.bookmark.note.isNotBlank()) {
+                                    Text(
+                                        item.bookmark.note,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+
+                        IconButton(onClick = { onDelete(item) }) {
+                            Icon(
+                                Icons.Default.DeleteOutline,
+                                contentDescription = "Delete bookmark",
+                                tint = if (isDark) TextMuted else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(if (isDark) ColorOrangeDim else MaterialTheme.colorScheme.secondaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = "Jump to bookmark",
+                                tint = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                }
             }
         }
     }

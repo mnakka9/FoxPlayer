@@ -6,81 +6,80 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val FoxBlue = Color(0xFF2563EB)
-private val FoxBlueBright = Color(0xFF3B82F6)
-private val FoxOrange = Color(0xFFF97316)
-private val FoxViolet = Color(0xFF7C3AED)
-private val FoxVioletSoft = Color(0xFF8B5CF6)
-
 private val DarkColors = darkColorScheme(
-    primary = FoxBlueBright,
+    primary = ColorBlueVioletLight,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFF1E3A8A),
-    onPrimaryContainer = Color(0xFFDBEAFE),
-    secondary = FoxOrange,
-    onSecondary = Color(0xFF1F2937),
-    secondaryContainer = Color(0xFF7C2D12),
-    onSecondaryContainer = Color(0xFFFFEDD5),
-    tertiary = FoxVioletSoft,
+    primaryContainer = ColorBlueVioletDim,
+    onPrimaryContainer = Color.White,
+    secondary = ColorOrange,
+    onSecondary = Color.White,
+    secondaryContainer = ColorOrangeDim,
+    onSecondaryContainer = ColorOrangeLight,
+    tertiary = ColorPurple,
     onTertiary = Color.White,
-    tertiaryContainer = Color(0xFF4C1D95),
-    onTertiaryContainer = Color(0xFFEDE9FE),
-    background = Color(0xFF0B1220),
-    onBackground = Color(0xFFF1F5F9),
-    surface = Color(0xFF111827),
-    onSurface = Color(0xFFF1F5F9),
-    surfaceVariant = Color(0xFF1E293B),
-    onSurfaceVariant = Color(0xFF94A3B8),
-    surfaceContainerLowest = Color(0xFF080E18),
-    surfaceContainerLow = Color(0xFF0F172A),
-    surfaceContainer = Color(0xFF152033),
-    surfaceContainerHigh = Color(0xFF1B2940),
-    surfaceContainerHighest = Color(0xFF243049),
-    outline = Color(0xFF334155),
-    outlineVariant = Color(0xFF1E293B),
-    error = Color(0xFFF87171),
-    onError = Color(0xFF1F2937),
+    tertiaryContainer = ColorPurpleDim,
+    onTertiaryContainer = ColorBlueVioletSubtle,
+    background = BgDeep,
+    onBackground = TextPrimary,
+    surface = BgMid,
+    onSurface = TextPrimary,
+    surfaceVariant = Color(0xFF161F45),
+    onSurfaceVariant = TextSecondary,
+    surfaceContainerLowest = BgDeep,
+    surfaceContainerLow = BgMid,
+    surfaceContainer = Color(0xFF101736),
+    surfaceContainerHigh = Color(0xFF161F45),
+    surfaceContainerHighest = Color(0xFF1E2958),
+    outline = GlassBorder,
+    outlineVariant = GlassBorderSubtle,
+    error = ColorRed,
+    onError = Color.White,
+    errorContainer = ColorRedDim,
+    onErrorContainer = ColorRedLight,
 )
 
 private val LightColors = lightColorScheme(
-    primary = FoxBlue,
+    primary = ColorBlueViolet,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFDBEAFE),
-    onPrimaryContainer = Color(0xFF1E3A8A),
-    secondary = FoxOrange,
+    primaryContainer = Color(0xFFEEF2FF),
+    onPrimaryContainer = Color(0xFF3730A3),
+    secondary = ColorOrange,
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFFFEDD5),
     onSecondaryContainer = Color(0xFF9A3412),
-    tertiary = FoxViolet,
+    tertiary = ColorPurple,
     onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFEDE9FE),
-    onTertiaryContainer = Color(0xFF4C1D95),
-    background = Color(0xFFF4F6FB),
+    tertiaryContainer = Color(0xFFF3E8FF),
+    onTertiaryContainer = Color(0xFF5B21B6),
+    background = Color(0xFFF8FAFC),
     onBackground = Color(0xFF0F172A),
-    surface = Color(0xFFF4F6FB),
+    surface = Color(0xFFF8FAFC),
     onSurface = Color(0xFF0F172A),
-    surfaceVariant = Color(0xFFE8EEF8),
+    surfaceVariant = Color(0xFFF1F5F9),
     onSurfaceVariant = Color(0xFF475569),
     surfaceContainerLowest = Color.White,
     surfaceContainerLow = Color(0xFFF8FAFC),
-    surfaceContainer = Color(0xFFEEF2F7),
-    surfaceContainerHigh = Color(0xFFE7EDF6),
-    surfaceContainerHighest = Color(0xFFDEE6F2),
+    surfaceContainer = Color(0xFFF1F5F9),
+    surfaceContainerHigh = Color(0xFFE2E8F0),
+    surfaceContainerHighest = Color(0xFFCBD5E1),
     outline = Color(0xFFCBD5E1),
     outlineVariant = Color(0xFFE2E8F0),
-    error = Color(0xFFDC2626),
+    error = ColorRed,
     onError = Color.White,
 )
 
 @Composable
 fun FoxPlayerTheme(
-    themeMode: ThemeMode,
+    themeMode: ThemeMode = ThemeMode.DARK,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = when (themeMode) {
-        ThemeMode.DARK -> DarkColors
-        ThemeMode.LIGHT -> LightColors
+    val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val isDark = when (themeMode) {
+        ThemeMode.DARK -> true
+        ThemeMode.LIGHT -> false
+        ThemeMode.SYSTEM -> isSystemDark
     }
+    val colorScheme = if (isDark) DarkColors else LightColors
 
     MaterialTheme(
         colorScheme = colorScheme,
