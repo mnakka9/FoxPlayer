@@ -37,6 +37,37 @@ class CoverResolver(
         File(coversDir(), "$bookId.jpg").delete()
     }
 
+    suspend fun saveCoverFromWeb(bookId: Long, imageUrl: String): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val dest = File(coversDir(), "$bookId.jpg")
+        try {
+            val url = java.net.URL(imageUrl)
+            val connection = (url.openConnection() as java.net.HttpURLConnection).apply {
+                connectTimeout = 8000
+                readTimeout = 8000
+                instanceFollowRedirects = true
+                setRequestProperty("User-Agent", "FoxPlayer/1.0 (Android Audiobook Player)")
+            }
+            if (connection.responseCode != java.net.HttpURLConnection.HTTP_OK) {
+                connection.disconnect()
+                return@withContext null
+            }
+            val bitmap = connection.inputStream.use { input ->
+                BitmapFactory.decodeStream(input)
+            } ?: run {
+                connection.disconnect()
+                return@withContext null
+            }
+            connection.disconnect()
+
+            FileOutputStream(dest).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
+            }
+            if (dest.length() > 0) dest.absolutePath else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun coversDir(): File {
         val dir = File(context.filesDir, "covers")
         if (!dir.exists()) dir.mkdirs()

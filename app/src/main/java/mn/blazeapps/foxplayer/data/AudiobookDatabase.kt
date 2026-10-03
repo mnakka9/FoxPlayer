@@ -25,9 +25,15 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE books ADD COLUMN description TEXT DEFAULT NULL")
+    }
+}
+
 @Database(
     entities = [BookEntity::class, ChapterEntity::class, BookmarkEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class AudiobookDatabase : RoomDatabase() {
@@ -38,7 +44,7 @@ abstract class AudiobookDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): AudiobookDatabase =
             Room.databaseBuilder(context, AudiobookDatabase::class.java, "audiobooks.db")
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .fallbackToDestructiveMigration()
                 .build()
     }
