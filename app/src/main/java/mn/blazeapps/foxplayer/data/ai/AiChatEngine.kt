@@ -455,18 +455,18 @@ class AiChatEngine(
     ): String {
         return buildString {
             append("<|im_start|>system\n")
-            append("You are an intelligent knowledge assistant. Summarize the web search findings into a coherent, informative answer.\n")
+            append("You are an intelligent knowledge assistant. Summarize the web search findings into a coherent, complete, and informative answer without cutting off sentences.\n")
             append("<|im_end|>\n")
             append("<|im_start|>user\n")
             append("Query: ").append(query).append("\n")
             if (wiki?.extract != null) {
-                append("Wikipedia: ").append(wiki.extract.take(300)).append("\n")
+                append("Wikipedia: ").append(OnnxBookMetadataEngine.sanitizeCompleteSentences(wiki.extract)).append("\n")
             }
             if (ddg?.abstractText != null || ddg?.definition != null) {
-                append("DuckDuckGo: ").append((ddg.definition ?: ddg.abstractText).orEmpty().take(200)).append("\n")
+                append("DuckDuckGo: ").append(OnnxBookMetadataEngine.sanitizeCompleteSentences((ddg.definition ?: ddg.abstractText).orEmpty())).append("\n")
             }
             if (brave?.snippets?.isNotEmpty() == true) {
-                append("Brave: ").append(brave.snippets.first().take(200)).append("\n")
+                append("Brave: ").append(OnnxBookMetadataEngine.sanitizeCompleteSentences(brave.snippets.first())).append("\n")
             }
             append("<|im_end|>\n")
             append("<|im_start|>assistant\n")
@@ -494,41 +494,41 @@ class AiChatEngine(
 
         // 1. Core Definition & Summary
         if (!ddg?.definition.isNullOrBlank()) {
-            sb.append("**Definition:** ${ddg.definition}\n\n")
+            sb.append("**Definition:** ${OnnxBookMetadataEngine.sanitizeCompleteSentences(ddg.definition)}\n\n")
         }
 
         if (!wiki?.extract.isNullOrBlank()) {
-            sb.append(wiki.extract).append("\n\n")
+            sb.append(OnnxBookMetadataEngine.sanitizeCompleteSentences(wiki.extract)).append("\n\n")
         } else if (!ddg?.abstractText.isNullOrBlank()) {
-            sb.append(ddg.abstractText).append("\n\n")
+            sb.append(OnnxBookMetadataEngine.sanitizeCompleteSentences(ddg.abstractText)).append("\n\n")
         } else if (!ddg?.answer.isNullOrBlank()) {
-            sb.append(ddg.answer).append("\n\n")
+            sb.append(OnnxBookMetadataEngine.sanitizeCompleteSentences(ddg.answer)).append("\n\n")
         }
 
-        // 2. Key Details & Context synthesized across sources
+        // 2. Key Details & Context synthesized across sources with complete sentence healing
         val keyPoints = mutableListOf<String>()
 
         // From Brave Search snippets
         brave?.snippets?.forEach { snippet ->
-            val trimmed = snippet.trim()
-            if (trimmed.length > 35 && keyPoints.none { it.take(30).equals(trimmed.take(30), ignoreCase = true) }) {
-                keyPoints.add(trimmed)
+            val cleaned = OnnxBookMetadataEngine.sanitizeCompleteSentences(snippet)
+            if (cleaned.length > 35 && keyPoints.none { it.take(30).equals(cleaned.take(30), ignoreCase = true) }) {
+                keyPoints.add(cleaned)
             }
         }
 
         // From DuckDuckGo related topics
         ddg?.relatedTopics?.forEach { topic ->
-            val trimmed = topic.trim()
-            if (trimmed.length > 30 && keyPoints.none { it.take(30).equals(trimmed.take(30), ignoreCase = true) }) {
-                keyPoints.add(trimmed)
+            val cleaned = OnnxBookMetadataEngine.sanitizeCompleteSentences(topic)
+            if (cleaned.length > 30 && keyPoints.none { it.take(30).equals(cleaned.take(30), ignoreCase = true) }) {
+                keyPoints.add(cleaned)
             }
         }
 
         // From Wikipedia search snippets
         wiki?.snippets?.forEach { snippet ->
-            val trimmed = snippet.trim()
-            if (trimmed.length > 35 && keyPoints.none { it.take(30).equals(trimmed.take(30), ignoreCase = true) }) {
-                keyPoints.add(trimmed)
+            val cleaned = OnnxBookMetadataEngine.sanitizeCompleteSentences(snippet)
+            if (cleaned.length > 35 && keyPoints.none { it.take(30).equals(cleaned.take(30), ignoreCase = true) }) {
+                keyPoints.add(cleaned)
             }
         }
 
@@ -552,7 +552,7 @@ class AiChatEngine(
             sources.add(ChatSource("${brave.snippets.size} Snippets", "Brave Search"))
         }
         if (usedOnnx) {
-            sources.add(ChatSource("SmolLM-135M ONNX", "On-Device Neural Model"))
+            sources.add(ChatSource("SmolLM2-360M ONNX", "On-Device Neural Model"))
         }
 
         return AiChatMessage(

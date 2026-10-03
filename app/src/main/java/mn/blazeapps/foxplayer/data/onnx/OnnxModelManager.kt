@@ -22,8 +22,8 @@ class OnnxModelManager(private val context: Context) {
 
     companion object {
         const val DEFAULT_MODEL_URL =
-            "https://huggingface.co/onnx-community/SmolLM-135M-Instruct-ONNX/resolve/main/onnx/model_q4f16.onnx"
-        private const val MODEL_SUBDIR = "models/smollm_135m"
+            "https://huggingface.co/onnx-community/SmolLM2-360M-Instruct-ONNX/resolve/main/onnx/model_q4f16.onnx"
+        private const val MODEL_SUBDIR = "models/smollm2_360m"
         private const val MODEL_FILENAME = "model.onnx"
     }
 
@@ -46,8 +46,8 @@ class OnnxModelManager(private val context: Context) {
 
     fun isModelDownloaded(): Boolean {
         val file = getModelFile()
-        // Quantized SmolLM-135M is ~70-120 MB
-        return file.exists() && file.length() > 10 * 1024 * 1024
+        // Quantized SmolLM2-360M is ~270 MB
+        return file.exists() && file.length() > 50 * 1024 * 1024
     }
 
     fun getModelSizeBytes(): Long {
@@ -74,8 +74,8 @@ class OnnxModelManager(private val context: Context) {
 
             // Check storage space
             val freeBytes = targetDir.usableSpace
-            if (freeBytes > 0 && freeBytes < 150L * 1024 * 1024) {
-                _downloadState.value = ModelDownloadState.Error("Insufficient storage: ${freeBytes / (1024 * 1024)}MB free, ~150MB needed")
+            if (freeBytes > 0 && freeBytes < 350L * 1024 * 1024) {
+                _downloadState.value = ModelDownloadState.Error("Insufficient storage: ${freeBytes / (1024 * 1024)}MB free, ~350MB needed")
                 return@withContext false
             }
 

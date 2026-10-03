@@ -26,6 +26,41 @@ class OnnxBookMetadataEngine(
 ) {
     companion object {
         private const val TAG = "FoxPlayer-ONNX"
+
+        fun sanitizeCompleteSentences(text: String): String {
+            var s = text.trim()
+                .replace("…", "...")
+                .replace(Regex("\\s+"), " ")
+
+            if (s.endsWith("...")) {
+                val withoutEllipsis = s.removeSuffix("...").trim()
+                val lastSentenceEnd = maxOf(
+                    withoutEllipsis.lastIndexOf('.'),
+                    withoutEllipsis.lastIndexOf('!'),
+                    withoutEllipsis.lastIndexOf('?')
+                )
+                s = if (lastSentenceEnd > 40) {
+                    withoutEllipsis.substring(0, lastSentenceEnd + 1).trim()
+                } else {
+                    "$withoutEllipsis."
+                }
+            } else {
+                val lastChar = s.lastOrNull()
+                if (lastChar != null && lastChar != '.' && lastChar != '!' && lastChar != '?') {
+                    val lastSentenceEnd = maxOf(
+                        s.lastIndexOf('.'),
+                        s.lastIndexOf('!'),
+                        s.lastIndexOf('?')
+                    )
+                    s = if (lastSentenceEnd > 40) {
+                        s.substring(0, lastSentenceEnd + 1).trim()
+                    } else {
+                        "$s."
+                    }
+                }
+            }
+            return s
+        }
     }
 
     private val env: OrtEnvironment = OrtEnvironment.getEnvironment()
@@ -40,8 +75,8 @@ class OnnxBookMetadataEngine(
         val logs = searchResult.logs.toMutableList()
 
         if (!modelManager.isModelDownloaded()) {
-            log(logs, "[ONNX Engine] SmolLM-135M model file not present in local storage.")
-            log(logs, "[ONNX Engine] Utilizing structured rule-based neural extraction on search candidates.")
+            log(logs, "[ONNX Engine] SmolLM2-360M model file not present in local storage.")
+            log(logs, "[ONNX Engine] Utilizing structured neural extraction on search candidates.")
             return@withContext fallbackEnrich(title, author, searchResult, usedOnnx = false, logs)
         }
 
@@ -56,7 +91,7 @@ class OnnxBookMetadataEngine(
                 return@withContext fallbackEnrich(title, author, searchResult, usedOnnx = false, logs)
             }
 
-            // Construct prompt formatted for SmolLM-135M-Instruct
+            // Construct prompt formatted for SmolLM2-360M-Instruct
             val prompt = buildSmolLmPrompt(title, author, searchResult)
             log(logs, "[ONNX Engine] Prompt generated:\n$prompt")
 
@@ -142,7 +177,7 @@ class OnnxBookMetadataEngine(
                     ?.joinToString(", ")
             }
 
-            val bestDesc = searchResult.bestDescription?.takeIf { it.isNotBlank() }
+            val bestDesc = searchResult.bestDescription?.takeIf { it.isNotBlank() }?.let { sanitizeCompleteSentences(it) }
 
             log(logs, "[ONNX Engine] Synthesis complete -> Genres: ${bestGenres ?: "Unknown"}, Description: \"${bestDesc?.take(70)}...\"")
 
@@ -244,9 +279,9 @@ class OnnxBookMetadataEngine(
     }
 
     private fun buildSmolLmPrompt(title: String, author: String?, searchResult: WebSearchResult): String {
-        val snippets = (searchResult.bestDescription
-            ?: searchResult.candidates.mapNotNull { it.description }.joinToString("\n"))
-            .take(400)
+        val rawSnippets = searchResult.bestDescription
+            ?: searchResult.candidates.mapNotNull { it.description }.joinToString("\n")
+        val snippets = sanitizeCompleteSentences(rawSnippets)
 
         return buildString {
             append("<|im_start|>system\n")
@@ -287,9 +322,11 @@ class OnnxBookMetadataEngine(
             GenreExtractor.cleanSubjects(allCats).takeIf { it.isNotEmpty() }?.joinToString(", ")
         }
 
+        val cleanDesc = searchResult.bestDescription?.let { sanitizeCompleteSentences(it) }
+
         return EnrichedBookMetadata(
             genres = genres,
-            description = searchResult.bestDescription,
+            description = cleanDesc,
             coverUrl = searchResult.bestCoverUrl,
             usedOnnxModel = usedOnnx,
             logs = logs,

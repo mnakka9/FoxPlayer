@@ -786,7 +786,7 @@ private fun EnrichMetadataDialog(
                                             modifier = Modifier.size(16.dp),
                                         )
                                         Text(
-                                            "Local ONNX Model: SmolLM-135M Ready",
+                                            "Local ONNX Model: SmolLM2-360M Ready",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
                                             color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
@@ -796,7 +796,7 @@ private fun EnrichMetadataDialog(
                                 is ModelDownloadState.Downloading -> {
                                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Text(
-                                            "Downloading SmolLM-135M ONNX (${(modelDownloadState.progress * 100).toInt()}%)...",
+                                            "Downloading SmolLM2-360M ONNX (${(modelDownloadState.progress * 100).toInt()}%)...",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = if (isDark) ColorBlueVioletLight else MaterialTheme.colorScheme.primary,
                                         )
