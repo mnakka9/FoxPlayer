@@ -69,17 +69,25 @@ fun BookAiChatPane(
             )
             .padding(10.dp),
     ) {
-        // Quick suggestion prompt chips
+        // Top action bar: only the internal notes filter + optional clear chat
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SuggestionChip(
-                onClick = { onSendMessage("Summarize my bookmark notes") },
-                label = { Text("📝 Summarize Notes", fontSize = 11.sp) },
+                onClick = { onSendMessage("Search my bookmark notes") },
+                label = { Text("📝 Search Notes", fontSize = 12.sp, fontWeight = FontWeight.Medium) },
+                icon = {
+                    Icon(
+                        Icons.Default.Bookmark,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = ColorBlueVioletLight,
+                    )
+                },
                 colors = SuggestionChipDefaults.suggestionChipColors(
                     containerColor = if (isDark) GlassBgStrong else MaterialTheme.colorScheme.surfaceVariant,
                     labelColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
@@ -89,42 +97,26 @@ fun BookAiChatPane(
                     borderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
                 ),
             )
-            SuggestionChip(
-                onClick = { onSendMessage("What is the historical context of this book?") },
-                label = { Text("🌐 Historical Context", fontSize = 11.sp) },
-                colors = SuggestionChipDefaults.suggestionChipColors(
-                    containerColor = if (isDark) GlassBgStrong else MaterialTheme.colorScheme.surfaceVariant,
-                    labelColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
-                ),
-                border = SuggestionChipDefaults.suggestionChipBorder(
-                    enabled = true,
-                    borderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
-                ),
-            )
-            SuggestionChip(
-                onClick = { onSendMessage("What is this book about?") },
-                label = { Text("📖 About Book", fontSize = 11.sp) },
-                colors = SuggestionChipDefaults.suggestionChipColors(
-                    containerColor = if (isDark) GlassBgStrong else MaterialTheme.colorScheme.surfaceVariant,
-                    labelColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
-                ),
-                border = SuggestionChipDefaults.suggestionChipBorder(
-                    enabled = true,
-                    borderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
-                ),
-            )
-            SuggestionChip(
-                onClick = onClearChat,
-                label = { Text("🧹 Reset Chat", fontSize = 11.sp) },
-                colors = SuggestionChipDefaults.suggestionChipColors(
-                    containerColor = if (isDark) Color(0x22EF4444) else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
-                    labelColor = if (isDark) ColorRedLight else MaterialTheme.colorScheme.error,
-                ),
-                border = SuggestionChipDefaults.suggestionChipBorder(
-                    enabled = true,
-                    borderColor = if (isDark) ColorRedDim else MaterialTheme.colorScheme.error.copy(alpha = 0.3f),
-                ),
-            )
+
+            if (messages.isNotEmpty()) {
+                TextButton(
+                    onClick = onClearChat,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Clear,
+                        contentDescription = "Clear Chat",
+                        modifier = Modifier.size(13.dp),
+                        tint = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "Clear",
+                        fontSize = 11.sp,
+                        color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                    )
+                }
+            }
         }
 
         Spacer(Modifier.height(6.dp))
@@ -161,7 +153,7 @@ fun BookAiChatPane(
                 onValueChange = { inputText = it },
                 placeholder = {
                     Text(
-                        "Ask definitions, history, notes...",
+                        "Search notes or ask anything online...",
                         fontSize = 13.sp,
                         color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
                     )
@@ -307,7 +299,8 @@ private fun SourceBadge(
 ) {
     val (badgeBg, badgeText) = when (src.type) {
         "Wikipedia" -> Color(0x2E0284C7) to Color(0xFF38BDF8)
-        "Dictionary" -> Color(0x2EEAB308) to Color(0xFFFDE047)
+        "DuckDuckGo" -> Color(0x2EE25C26) to Color(0xFFFF8B53)
+        "Brave Search" -> Color(0x2EFB542B) to Color(0xFFFF7A59)
         "Bookmarks" -> Color(0x2E10B981) to Color(0xFF6EE7B7)
         "On-Device Neural Model" -> ColorPurpleDim to ColorPurple
         else -> ColorOrangeDim to ColorOrangeLight
@@ -350,7 +343,7 @@ private fun GeneratingBubble(isDark: Boolean) {
                     color = ColorOrange,
                 )
                 Text(
-                    "Searching knowledge & notes...",
+                    "Searching web & summarizing...",
                     style = MaterialTheme.typography.labelSmall,
                     color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )

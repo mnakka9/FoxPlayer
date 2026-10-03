@@ -183,6 +183,66 @@ class OnnxBookMetadataEngine(
         session = null
     }
 
+    suspend fun runChatInference(prompt: String): Boolean = withContext(Dispatchers.Default) {
+        if (!modelManager.isModelDownloaded()) return@withContext false
+        try {
+            val logs = mutableListOf<String>()
+            ensureSessionLoaded(logs)
+            val currentSession = session ?: return@withContext false
+            val tokenIds = simpleTokenize(prompt, maxTokens = 256)
+            val inputIdsBuffer = LongBuffer.wrap(tokenIds)
+            val attentionMaskBuffer = LongBuffer.wrap(LongArray(tokenIds.size) { 1L })
+            val shape = longArrayOf(1, tokenIds.size.toLong())
+
+            val inputTensor = OnnxTensor.createTensor(env, inputIdsBuffer, shape)
+            val maskTensor = OnnxTensor.createTensor(env, attentionMaskBuffer, shape)
+            val inputs = mutableMapOf<String, OnnxTensor>()
+            inputs["input_ids"] = inputTensor
+            inputs["attention_mask"] = maskTensor
+            val tensorsToClose = mutableListOf<OnnxTensor>(inputTensor, maskTensor)
+
+            for ((name, nodeInfo) in currentSession.inputInfo) {
+                if (inputs.containsKey(name)) continue
+                if (name == "position_ids") {
+                    val posBuffer = LongBuffer.wrap(LongArray(tokenIds.size) { it.toLong() })
+                    val posTensor = OnnxTensor.createTensor(env, posBuffer, shape)
+                    inputs[name] = posTensor
+                    tensorsToClose.add(posTensor)
+                } else if (name.startsWith("past_key_values")) {
+                    val tensorInfo = nodeInfo.info as? TensorInfo
+                    val nodeShape = tensorInfo?.shape
+                    val kvShape = if (nodeShape != null && nodeShape.size == 4) {
+                        longArrayOf(
+                            if (nodeShape[0] > 0) nodeShape[0] else 1L,
+                            if (nodeShape[1] > 0) nodeShape[1] else 3L,
+                            0L,
+                            if (nodeShape[3] > 0) nodeShape[3] else 64L,
+                        )
+                    } else {
+                        longArrayOf(1L, 3L, 0L, 64L)
+                    }
+                    val emptyBuf = java.nio.FloatBuffer.allocate(0)
+                    val kvTensor = OnnxTensor.createTensor(env, emptyBuf, kvShape)
+                    inputs[name] = kvTensor
+                    tensorsToClose.add(kvTensor)
+                }
+            }
+
+            val result = try {
+                currentSession.run(inputs)
+            } finally {
+                for (t in tensorsToClose) {
+                    try { t.close() } catch (_: Exception) {}
+                }
+            }
+            result.close()
+            true
+        } catch (e: Exception) {
+            log(mutableListOf(), "[ONNX Chat] Inference error: ${e.message}")
+            false
+        }
+    }
+
     private fun buildSmolLmPrompt(title: String, author: String?, searchResult: WebSearchResult): String {
         val snippets = (searchResult.bestDescription
             ?: searchResult.candidates.mapNotNull { it.description }.joinToString("\n"))

@@ -111,24 +111,27 @@ class AiChatEngineTest {
     }
 
     @Test
-    fun testBookMetadataQuery() = runBlocking {
+    fun testWebSearchDefinitionQuery() = runBlocking {
         val result = aiChatEngine.processQuery(
-            query = "What is this book about?",
+            query = "define serendipity",
             book = testBook,
             chapters = testChapters,
             bookmarks = emptyList(),
         )
 
         assertEquals(ChatSender.Assistant, result.sender)
-        assertTrue(result.text.contains("Storm Mage"))
-        assertTrue(result.text.contains("Mark Torr"))
-        assertTrue(result.text.contains("Surf, sun, and power over lightning itself"))
+        assertTrue(result.text.isNotBlank())
+        // Should have found information from Wikipedia, DuckDuckGo, or Brave
+        assertTrue(result.sources.isNotEmpty())
+        assertTrue(
+            result.sources.any { it.type == "Wikipedia" || it.type == "DuckDuckGo" || it.type == "Brave Search" }
+        )
     }
 
     @Test
-    fun testDictionaryQuery() = runBlocking {
+    fun testWebSearchGeneralTopicQuery() = runBlocking {
         val result = aiChatEngine.processQuery(
-            query = "define epiphany",
+            query = "stoicism",
             book = testBook,
             chapters = testChapters,
             bookmarks = emptyList(),
@@ -137,8 +140,8 @@ class AiChatEngineTest {
         assertEquals(ChatSender.Assistant, result.sender)
         assertTrue(result.text.isNotBlank())
         assertTrue(result.sources.isNotEmpty())
-        val isDictionary = result.sources.any { it.type == "Dictionary" }
-        val isFallback = result.sources.any { it.type == "Book Context" }
-        assertTrue(isDictionary || isFallback)
+        assertTrue(
+            result.sources.any { it.type == "Wikipedia" || it.type == "DuckDuckGo" || it.type == "Brave Search" }
+        )
     }
 }

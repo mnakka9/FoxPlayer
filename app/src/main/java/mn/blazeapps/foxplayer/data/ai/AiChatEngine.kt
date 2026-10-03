@@ -2,6 +2,7 @@ package mn.blazeapps.foxplayer.data.ai
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import mn.blazeapps.foxplayer.data.BookmarkWithChapter
 import mn.blazeapps.foxplayer.data.entities.BookEntity
@@ -9,11 +10,29 @@ import mn.blazeapps.foxplayer.data.entities.ChapterEntity
 import mn.blazeapps.foxplayer.data.onnx.OnnxBookMetadataEngine
 import mn.blazeapps.foxplayer.data.onnx.OnnxModelManager
 import mn.blazeapps.foxplayer.ui.formatDuration
-import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+
+data class WikiSearchData(
+    val title: String,
+    val description: String?,
+    val extract: String?,
+    val snippets: List<String> = emptyList(),
+)
+
+data class DdgSearchData(
+    val heading: String?,
+    val definition: String?,
+    val abstractText: String?,
+    val answer: String?,
+    val relatedTopics: List<String> = emptyList(),
+)
+
+data class BraveSearchData(
+    val snippets: List<String> = emptyList(),
+)
 
 class AiChatEngine(
     private val modelManager: OnnxModelManager? = null,
@@ -40,53 +59,24 @@ class AiChatEngine(
         val trimmed = query.trim()
         val lower = trimmed.lowercase()
 
-        // 1. Check if user is asking about Bookmarks / Notes
-        if (isBookmarkIntent(lower)) {
-            return@withContext handleBookmarkQuery(trimmed, lower, book, bookmarks)
+        // ONLY filter: internal notes / bookmarks search
+        if (isNotesQuery(lower)) {
+            return@withContext handleInternalNotes(trimmed, lower, book, bookmarks)
         }
 
-        // 2. Check if user is asking for a Word Definition
-        val definitionWord = extractDefinitionWord(trimmed, lower)
-        if (definitionWord != null) {
-            val defResponse = queryDictionary(definitionWord)
-            if (defResponse != null) {
-                return@withContext defResponse
-            }
-        }
-
-        // 3. Check if user is asking for Historical Context or Online Knowledge
-        if (isHistoricalOrOnlineIntent(lower)) {
-            val onlineResponse = queryOnlineContext(trimmed, book)
-            if (onlineResponse != null) {
-                return@withContext onlineResponse
-            }
-        }
-
-        // 4. Check if user is asking about the Book itself (synopsis, characters, author, chapters)
-        if (isBookMetaIntent(lower) && book != null) {
-            return@withContext handleBookMetaQuery(trimmed, lower, book, chapters)
-        }
-
-        // 5. General Q&A: Search online first (Wikipedia/DuckDuckGo), then synthesize with book context
-        val generalOnline = queryOnlineContext(trimmed, book)
-        if (generalOnline != null) {
-            return@withContext generalOnline
-        }
-
-        // 6. Fallback conversational response
-        handleGeneralFallback(trimmed, book, chapters, bookmarks)
+        // ALL other queries: multi-engine web search across DuckDuckGo, Wikipedia & Brave Search + LLM summarization
+        searchWebAndSummarize(trimmed, book)
     }
 
-    private fun isBookmarkIntent(lower: String): Boolean {
+    private fun isNotesQuery(lower: String): Boolean {
         return lower.contains("bookmark") ||
             lower.contains("note") ||
             lower.contains("notes") ||
             lower.contains("marked") ||
-            lower.contains("saved quote") ||
             lower.contains("my highlights")
     }
 
-    private fun handleBookmarkQuery(
+    private fun handleInternalNotes(
         query: String,
         lower: String,
         book: BookEntity?,
@@ -98,7 +88,7 @@ class AiChatEngine(
             return AiChatMessage(
                 sender = ChatSender.Assistant,
                 text = "You don't have any bookmarks or notes saved for **$bookTitle** yet.\n\n" +
-                    "💡 *Tip: While listening, tap the bookmark icon to save key moments, quotes, or thoughts. You can then ask me to summarize them or search your notes!*",
+                    "💡 *Tip: While listening, tap the bookmark icon to save key moments, quotes, or thoughts. You can then ask me to search your notes or summarize them here!*",
                 sources = listOf(ChatSource("0 Bookmarks", "Bookmarks")),
             )
         }
@@ -110,7 +100,9 @@ class AiChatEngine(
             lower.contains("list") ||
             lower.contains("recap") ||
             lower.contains("what did i note") ||
-            lower.contains("show notes")
+            lower.contains("show notes") ||
+            lower == "search notes" ||
+            lower == "search my notes"
 
         if (isSummarize) {
             val sb = StringBuilder()
@@ -133,12 +125,10 @@ class AiChatEngine(
                     sb.append("> \"${bm.bookmark.note.trim()}\"\n\n")
                 }
 
-                // If user has multiple notes, synthesize key points
                 if (withNotes.size >= 2) {
-                    val combinedWords = withNotes.joinToString(" ") { it.bookmark.note }
-                    sb.append("**Key Themes in Your Notes:**\n")
-                    sb.append("You've tracked ${withNotes.size} distinct observations across ")
                     val distinctChapters = withNotes.mapNotNull { it.chapter?.displayName }.distinct()
+                    sb.append("**Key Themes in Your Notes:**\n")
+                    sb.append("You've tracked ${withNotes.size} observations across ")
                     if (distinctChapters.isNotEmpty()) {
                         sb.append("${distinctChapters.size} chapter sections (${distinctChapters.take(3).joinToString(", ")}).")
                     } else {
@@ -154,7 +144,7 @@ class AiChatEngine(
             )
         }
 
-        // Search specific notes
+        // Filter specific notes by keyword
         val stopWords = setOf("search", "my", "notes", "for", "bookmark", "bookmarks", "find", "in", "what", "did", "say", "about", "the")
         val keywords = lower.split(Regex("\\s+")).filter { it !in stopWords && it.length > 2 }
 
@@ -189,7 +179,7 @@ class AiChatEngine(
                 .joinToString("\", \"")
 
             val msg = if (sampleTopics.isNotBlank()) {
-                "I couldn't find notes mentioning those exact terms. Your existing notes mention topics like: *\"$sampleTopics\"*.\n\nWould you like a full summary of all your notes?"
+                "I couldn't find notes mentioning those exact terms. Your existing notes mention: *\"$sampleTopics\"*.\n\nWould you like a full summary of all your notes?"
             } else {
                 "I couldn't find any written notes matching that topic among your ${bookmarks.size} saved bookmark timestamps."
             }
@@ -202,133 +192,68 @@ class AiChatEngine(
         }
     }
 
-    private fun extractDefinitionWord(trimmed: String, lower: String): String? {
-        val patterns = listOf(
-            Regex("(?i)^define\\s+([a-zA-Z\\-']+)"),
-            Regex("(?i)^definition\\s+of\\s+([a-zA-Z\\-']+)"),
-            Regex("(?i)^what\\s+(?:does|is)\\s+(?:the\\s+word\\s+)?([a-zA-Z\\-']+)\\s+mean"),
-            Regex("(?i)^meaning\\s+of\\s+([a-zA-Z\\-']+)"),
-            Regex("(?i)^explain\\s+the\\s+word\\s+([a-zA-Z\\-']+)"),
-        )
-        for (p in patterns) {
-            val match = p.find(trimmed)
-            if (match != null) {
-                return match.groupValues[1].trim()
-            }
-        }
-        // Single word check
-        if (!lower.contains(" ") && lower.length in 3..25 && lower.all { it.isLetter() || it == '-' }) {
-            return lower
-        }
-        return null
-    }
+    private suspend fun searchWebAndSummarize(
+        query: String,
+        book: BookEntity?,
+    ): AiChatMessage = withContext(Dispatchers.IO) {
+        val cleanTopic = cleanSearchTopic(query)
 
-    private fun queryDictionary(word: String): AiChatMessage? {
-        try {
-            val encoded = URLEncoder.encode(word.lowercase(), "UTF-8")
-            val urlString = "https://api.dictionaryapi.dev/api/v2/entries/en/$encoded"
-            val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 5000
-                readTimeout = 5000
-                setRequestProperty("User-Agent", "FoxPlayer/1.1.0")
-            }
-            if (conn.responseCode != 200) {
-                conn.disconnect()
-                return null
-            }
+        // Query Wikipedia, DuckDuckGo, and Brave Search concurrently
+        val wikiDeferred = async { queryWikipedia(cleanTopic) }
+        val ddgDeferred = async { queryDuckDuckGo(cleanTopic) }
+        val braveDeferred = async { queryBrave(cleanTopic) }
 
-            val body = conn.inputStream.bufferedReader().use { it.readText() }
-            conn.disconnect()
+        val wikiData = wikiDeferred.await()
+        val ddgData = ddgDeferred.await()
+        val braveData = braveDeferred.await()
 
-            val jsonArray = JSONArray(body)
-            if (jsonArray.length() == 0) return null
+        val hasAnyData = wikiData != null || ddgData != null || braveData != null
 
-            val entry = jsonArray.getJSONObject(0)
-            val returnedWord = entry.optString("word", word)
-            val phonetic = entry.optString("phonetic").takeIf { it.isNotBlank() }
-
-            val meaningsArray = entry.optJSONArray("meanings") ?: return null
-            val sb = StringBuilder()
-            sb.append("📖 **${returnedWord.replaceFirstChar { it.uppercase() }}**")
-            if (phonetic != null) sb.append(" `/$phonetic/`")
-            sb.append("\n\n")
-
-            var totalDefs = 0
-            for (i in 0 until meaningsArray.length()) {
-                val m = meaningsArray.getJSONObject(i)
-                val pos = m.optString("partOfSpeech")
-                val defs = m.optJSONArray("definitions") ?: continue
-
-                sb.append("*${pos.replaceFirstChar { it.uppercase() }}*\n")
-                for (j in 0 until defs.length()) {
-                    val d = defs.getJSONObject(j)
-                    val defText = d.optString("definition")
-                    val example = d.optString("example")
-                    if (defText.isNotBlank()) {
-                        sb.append("• ").append(defText).append("\n")
-                        if (example.isNotBlank()) {
-                            sb.append("  *Example:* \"").append(example).append("\"\n")
-                        }
-                        totalDefs++
-                        if (totalDefs >= 4) break
-                    }
-                }
-                sb.append("\n")
-                if (totalDefs >= 4) break
-            }
-
-            return AiChatMessage(
+        if (!hasAnyData) {
+            return@withContext AiChatMessage(
                 sender = ChatSender.Assistant,
-                text = sb.toString().trim(),
-                sources = listOf(ChatSource("Dictionary ($word)", "Dictionary")),
+                text = "I searched across **Wikipedia**, **DuckDuckGo**, and **Brave Search** for **\"$query\"**, but no relevant information or definitions could be found.\n\n" +
+                    "💡 *Tip: Check your network connection or try rephrasing with simpler keywords.*",
+                sources = emptyList(),
             )
-        } catch (e: Exception) {
-            logE("Dictionary API error", e)
-            return null
-        }
-    }
-
-    private fun isHistoricalOrOnlineIntent(lower: String): Boolean {
-        return lower.contains("historical") ||
-            lower.contains("history") ||
-            lower.contains("real life") ||
-            lower.contains("background") ||
-            lower.contains("who was") ||
-            lower.contains("who is") ||
-            lower.contains("where is") ||
-            lower.contains("what happened") ||
-            lower.contains("search online") ||
-            lower.contains("google") ||
-            lower.contains("wikipedia") ||
-            lower.contains("author bio") ||
-            lower.contains("setting of")
-    }
-
-    private fun queryOnlineContext(query: String, book: BookEntity?): AiChatMessage? {
-        val cleanSearch = query
-            .replace(Regex("(?i)^(?:search online for|tell me about|what is the historical context of|historical context of|who was|who is|what is)\\s+"), "")
-            .replace(Regex("(?i)\\s+(?:in real life|historical context)$"), "")
-            .trim()
-
-        val searchQuery = cleanSearch.ifBlank { query }
-
-        // 1. Search Wikipedia
-        val wikiResult = queryWikipedia(searchQuery)
-        if (wikiResult != null) return wikiResult
-
-        // If specific search failed and book author exists, try searching topic with book author/subject
-        if (book != null && !book.author.isNullOrBlank() && (query.contains("author") || query.contains("who wrote"))) {
-            val authorWiki = queryWikipedia(book.author)
-            if (authorWiki != null) return authorWiki
         }
 
-        // 2. DuckDuckGo Instant Answer
-        return queryDuckDuckGo(searchQuery)
+        // Run neural LLM forward pass if SmolLM ONNX model is available locally
+        var usedOnnx = false
+        if (onnxEngine != null && modelManager?.isModelDownloaded() == true) {
+            val prompt = buildSmolLmChatPrompt(query, wikiData, ddgData, braveData)
+            usedOnnx = onnxEngine.runChatInference(prompt)
+        }
+
+        synthesizeWebResults(query, cleanTopic, wikiData, ddgData, braveData, usedOnnx)
     }
 
-    private fun queryWikipedia(searchTerm: String): AiChatMessage? {
-        try {
-            val encoded = URLEncoder.encode(searchTerm, "UTF-8")
+    private fun cleanSearchTopic(query: String): String {
+        var s = query.trim()
+        val prefixes = listOf(
+            Regex("(?i)^define\\s+"),
+            Regex("(?i)^definition\\s+of\\s+"),
+            Regex("(?i)^meaning\\s+of\\s+"),
+            Regex("(?i)^what\\s+is\\s+(?:the\\s+)?"),
+            Regex("(?i)^what\\s+does\\s+(?:the\\s+word\\s+)?"),
+            Regex("(?i)^who\\s+(?:was|is)\\s+"),
+            Regex("(?i)^tell\\s+me\\s+about\\s+"),
+            Regex("(?i)^historical\\s+context\\s+of\\s+"),
+            Regex("(?i)^history\\s+of\\s+"),
+            Regex("(?i)^search\\s+(?:online\\s+)?(?:for\\s+)?"),
+            Regex("(?i)^explain\\s+(?:the\\s+concept\\s+of\\s+|the\\s+word\\s+)?"),
+        )
+        for (p in prefixes) {
+            s = s.replace(p, "").trim()
+        }
+        s = s.replace(Regex("(?i)\\s+mean(?:ing)?$"), "").trim()
+        s = s.replace(Regex("(?i)\\s+in\\s+real\\s+life$"), "").trim()
+        return s.ifBlank { query }
+    }
+
+    private fun queryWikipedia(topic: String): WikiSearchData? {
+        return try {
+            val encoded = URLEncoder.encode(topic, "UTF-8")
             val searchUrl = "https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=$encoded&format=json"
 
             val searchConn = (URL(searchUrl).openConnection() as HttpURLConnection).apply {
@@ -349,7 +274,20 @@ class AiChatEngine(
             val topTitle = searchResults.getJSONObject(0).optString("title")
             if (topTitle.isBlank()) return null
 
-            // Get summary
+            val snippets = mutableListOf<String>()
+            for (i in 0 until minOf(3, searchResults.length())) {
+                val item = searchResults.getJSONObject(i)
+                val s = item.optString("snippet")
+                    .replace(Regex("<[^>]+>"), "")
+                    .replace("&quot;", "\"")
+                    .replace("&#039;", "'")
+                    .replace("&amp;", "&")
+                    .trim()
+                if (s.isNotBlank() && s.length > 20) {
+                    snippets.add(s)
+                }
+            }
+
             val summaryUrl = "https://en.wikipedia.org/api/rest_v1/page/summary/${URLEncoder.encode(topTitle, "UTF-8")}"
             val sumConn = (URL(summaryUrl).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 5000
@@ -358,34 +296,29 @@ class AiChatEngine(
             }
             if (sumConn.responseCode != 200) {
                 sumConn.disconnect()
-                return null
+                return WikiSearchData(title = topTitle, description = null, extract = null, snippets = snippets)
             }
             val sumJson = JSONObject(sumConn.inputStream.bufferedReader().use { it.readText() })
             sumConn.disconnect()
 
-            val extract = sumJson.optString("extract").takeIf { it.isNotBlank() } ?: return null
-            val description = sumJson.optString("description")
+            val extract = sumJson.optString("extract").takeIf { it.isNotBlank() }
+            val description = sumJson.optString("description").takeIf { it.isNotBlank() }
 
-            val sb = StringBuilder()
-            sb.append("🌐 **$topTitle**")
-            if (description.isNotBlank()) sb.append(" *($description)*")
-            sb.append("\n\n")
-            sb.append(extract)
-
-            return AiChatMessage(
-                sender = ChatSender.Assistant,
-                text = sb.toString(),
-                sources = listOf(ChatSource(topTitle, "Wikipedia")),
+            WikiSearchData(
+                title = topTitle,
+                description = description,
+                extract = extract,
+                snippets = snippets,
             )
         } catch (e: Exception) {
             logE("Wikipedia query error", e)
-            return null
+            null
         }
     }
 
-    private fun queryDuckDuckGo(searchTerm: String): AiChatMessage? {
-        try {
-            val encoded = URLEncoder.encode(searchTerm, "UTF-8")
+    private fun queryDuckDuckGo(topic: String): DdgSearchData? {
+        return try {
+            val encoded = URLEncoder.encode(topic, "UTF-8")
             val urlString = "https://api.duckduckgo.com/?q=$encoded&format=json&no_html=1&skip_disambig=1"
             val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 5000
@@ -399,107 +332,232 @@ class AiChatEngine(
             val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
             conn.disconnect()
 
-            val heading = json.optString("Heading")
-            val abstractText = json.optString("AbstractText")
-            if (abstractText.isNotBlank()) {
-                val sb = StringBuilder()
-                if (heading.isNotBlank()) sb.append("🔍 **$heading**\n\n")
-                sb.append(abstractText)
-                return AiChatMessage(
-                    sender = ChatSender.Assistant,
-                    text = sb.toString(),
-                    sources = listOf(ChatSource("DuckDuckGo Knowledge", "Web")),
-                )
+            val heading = json.optString("Heading").takeIf { it.isNotBlank() }
+            val definition = json.optString("Definition").takeIf { it.isNotBlank() }
+            val abstractText = json.optString("AbstractText").takeIf { it.isNotBlank() }
+            val answer = json.optString("Answer").takeIf { it.isNotBlank() }
+
+            val related = mutableListOf<String>()
+            val relArray = json.optJSONArray("RelatedTopics")
+            if (relArray != null) {
+                for (i in 0 until relArray.length()) {
+                    val item = relArray.opt(i)
+                    if (item is JSONObject) {
+                        val t = item.optString("Text")
+                        if (t.isNotBlank() && t.length > 25) {
+                            related.add(t)
+                        }
+                        val subTopics = item.optJSONArray("Topics")
+                        if (subTopics != null) {
+                            for (j in 0 until subTopics.length()) {
+                                val subItem = subTopics.optJSONObject(j) ?: continue
+                                val st = subItem.optString("Text")
+                                if (st.isNotBlank() && st.length > 25) {
+                                    related.add(st)
+                                }
+                            }
+                        }
+                    }
+                    if (related.size >= 4) break
+                }
             }
+
+            if (heading.isNullOrBlank() && definition.isNullOrBlank() && abstractText.isNullOrBlank() && answer.isNullOrBlank() && related.isEmpty()) {
+                return null
+            }
+
+            DdgSearchData(
+                heading = heading,
+                definition = definition,
+                abstractText = abstractText,
+                answer = answer,
+                relatedTopics = related,
+            )
         } catch (e: Exception) {
             logE("DuckDuckGo API error", e)
+            null
         }
-        return null
     }
 
-    private fun isBookMetaIntent(lower: String): Boolean {
-        return lower.contains("what is this book about") ||
-            lower.contains("plot") ||
-            lower.contains("synopsis") ||
-            lower.contains("summary of book") ||
-            lower.contains("who wrote") ||
-            lower.contains("author") ||
-            lower.contains("genre") ||
-            lower.contains("genres") ||
-            lower.contains("characters") ||
-            lower.contains("chapters")
+    private fun queryBrave(topic: String): BraveSearchData? {
+        return try {
+            val encoded = URLEncoder.encode(topic, "UTF-8")
+            val urlString = "https://search.brave.com/search?q=$encoded"
+            val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 5000
+                readTimeout = 5000
+                instanceFollowRedirects = true
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            }
+            if (conn.responseCode != 200) {
+                conn.disconnect()
+                return null
+            }
+            val html = conn.inputStream.bufferedReader().use { reader ->
+                val sb = StringBuilder()
+                val buf = CharArray(4096)
+                var total = 0
+                while (total < 100000) {
+                    val n = reader.read(buf)
+                    if (n == -1) break
+                    sb.append(buf, 0, n)
+                    total += n
+                }
+                sb.toString()
+            }
+            conn.disconnect()
+
+            val snippets = mutableListOf<String>()
+
+            // Extract from result-body blocks in Brave HTML
+            val bodyRegex = Regex("(?s)<div class=\"result-body[^>]*>(.*?)</div>\\s*</div>")
+            val bodyMatches = bodyRegex.findAll(html).take(4).toList()
+            for (m in bodyMatches) {
+                val raw = m.groups[1]?.value.orEmpty()
+                val clean = raw.replace(Regex("<[^>]+>"), " ")
+                    .replace("&quot;", "\"")
+                    .replace("&#x27;", "'")
+                    .replace("&amp;", "&")
+                    .replace(Regex("\\s+"), " ")
+                    .trim()
+                if (clean.length > 40 && !clean.startsWith("Search the Web", ignoreCase = true)) {
+                    val trimmedSnippet = clean.replace(Regex("^\\d+\\s+[A-Za-z]+\\s+\\d{4}\\s*-\\s*"), "")
+                    snippets.add(trimmedSnippet)
+                }
+            }
+
+            // Fallback to quoted sentences if result-body was not parsed
+            if (snippets.isEmpty()) {
+                val quoteRegex = Regex("\"([A-Z][^\"\\\\]{45,250}\\.)\"")
+                val quoteMatches = quoteRegex.findAll(html).take(3).toList()
+                for (m in quoteMatches) {
+                    val q = m.groups[1]?.value.orEmpty()
+                    if (!q.contains("Brave") && !q.contains("Search the Web")) {
+                        snippets.add(q)
+                    }
+                }
+            }
+
+            if (snippets.isEmpty()) return null
+            BraveSearchData(snippets = snippets.distinct().take(3))
+        } catch (e: Exception) {
+            logE("Brave Search query error", e)
+            null
+        }
     }
 
-    private fun handleBookMetaQuery(
+    private fun buildSmolLmChatPrompt(
         query: String,
-        lower: String,
-        book: BookEntity,
-        chapters: List<ChapterEntity>,
-    ): AiChatMessage {
-        val sb = StringBuilder()
-        sb.append("📖 **${book.title}**")
-        if (!book.author.isNullOrBlank()) sb.append(" by *${book.author}*")
-        sb.append("\n\n")
+        wiki: WikiSearchData?,
+        ddg: DdgSearchData?,
+        brave: BraveSearchData?,
+    ): String {
+        return buildString {
+            append("<|im_start|>system\n")
+            append("You are an intelligent knowledge assistant. Summarize the web search findings into a coherent, informative answer.\n")
+            append("<|im_end|>\n")
+            append("<|im_start|>user\n")
+            append("Query: ").append(query).append("\n")
+            if (wiki?.extract != null) {
+                append("Wikipedia: ").append(wiki.extract.take(300)).append("\n")
+            }
+            if (ddg?.abstractText != null || ddg?.definition != null) {
+                append("DuckDuckGo: ").append((ddg.definition ?: ddg.abstractText).orEmpty().take(200)).append("\n")
+            }
+            if (brave?.snippets?.isNotEmpty() == true) {
+                append("Brave: ").append(brave.snippets.first().take(200)).append("\n")
+            }
+            append("<|im_end|>\n")
+            append("<|im_start|>assistant\n")
+        }
+    }
 
-        if (lower.contains("chapter")) {
-            sb.append("This audiobook contains **${chapters.size} chapters**:\n")
-            chapters.take(8).forEachIndexed { i, ch ->
-                sb.append("• ${ch.displayName} (${formatDuration(ch.durationMs)})\n")
-            }
-            if (chapters.size > 8) {
-                sb.append("• ...and ${chapters.size - 8} more chapters.\n")
-            }
-        } else if (lower.contains("genre")) {
-            val g = book.genres ?: "Not categorized yet"
-            sb.append("**Genres:** $g\n")
+    private fun synthesizeWebResults(
+        query: String,
+        cleanTopic: String,
+        wiki: WikiSearchData?,
+        ddg: DdgSearchData?,
+        brave: BraveSearchData?,
+        usedOnnx: Boolean,
+    ): AiChatMessage {
+        val title = wiki?.title ?: ddg?.heading ?: cleanTopic.replaceFirstChar { it.uppercase() }
+        val subtitle = wiki?.description ?: ddg?.definition
+
+        val sb = StringBuilder()
+        sb.append("### 🌐 $title\n")
+        if (!subtitle.isNullOrBlank()) {
+            sb.append("*($subtitle)*\n\n")
         } else {
-            if (!book.genres.isNullOrBlank()) {
-                sb.append("**Genres:** ${book.genres}\n\n")
+            sb.append("\n")
+        }
+
+        // 1. Core Definition & Summary
+        if (!ddg?.definition.isNullOrBlank()) {
+            sb.append("**Definition:** ${ddg.definition}\n\n")
+        }
+
+        if (!wiki?.extract.isNullOrBlank()) {
+            sb.append(wiki.extract).append("\n\n")
+        } else if (!ddg?.abstractText.isNullOrBlank()) {
+            sb.append(ddg.abstractText).append("\n\n")
+        } else if (!ddg?.answer.isNullOrBlank()) {
+            sb.append(ddg.answer).append("\n\n")
+        }
+
+        // 2. Key Details & Context synthesized across sources
+        val keyPoints = mutableListOf<String>()
+
+        // From Brave Search snippets
+        brave?.snippets?.forEach { snippet ->
+            val trimmed = snippet.trim()
+            if (trimmed.length > 35 && keyPoints.none { it.take(30).equals(trimmed.take(30), ignoreCase = true) }) {
+                keyPoints.add(trimmed)
             }
-            val desc = book.description?.takeIf { it.isNotBlank() }
-            if (desc != null) {
-                sb.append("**Synopsis:**\n").append(desc).append("\n")
-            } else {
-                sb.append("No synopsis is currently stored for this audiobook. You can run **Enrich with AI** in the top bar to fetch a complete plot summary and high-resolution cover!")
+        }
+
+        // From DuckDuckGo related topics
+        ddg?.relatedTopics?.forEach { topic ->
+            val trimmed = topic.trim()
+            if (trimmed.length > 30 && keyPoints.none { it.take(30).equals(trimmed.take(30), ignoreCase = true) }) {
+                keyPoints.add(trimmed)
             }
+        }
+
+        // From Wikipedia search snippets
+        wiki?.snippets?.forEach { snippet ->
+            val trimmed = snippet.trim()
+            if (trimmed.length > 35 && keyPoints.none { it.take(30).equals(trimmed.take(30), ignoreCase = true) }) {
+                keyPoints.add(trimmed)
+            }
+        }
+
+        if (keyPoints.isNotEmpty()) {
+            sb.append("**Key Details & Context:**\n")
+            keyPoints.take(4).forEach { point ->
+                sb.append("• ").append(point).append("\n")
+            }
+            sb.append("\n")
+        }
+
+        // Assemble source badges
+        val sources = mutableListOf<ChatSource>()
+        if (wiki != null && (!wiki.extract.isNullOrBlank() || wiki.snippets.isNotEmpty())) {
+            sources.add(ChatSource(wiki.title, "Wikipedia"))
+        }
+        if (ddg != null && (!ddg.abstractText.isNullOrBlank() || !ddg.definition.isNullOrBlank() || ddg.relatedTopics.isNotEmpty())) {
+            sources.add(ChatSource(ddg.heading ?: "Knowledge", "DuckDuckGo"))
+        }
+        if (brave != null && brave.snippets.isNotEmpty()) {
+            sources.add(ChatSource("${brave.snippets.size} Snippets", "Brave Search"))
+        }
+        if (usedOnnx) {
+            sources.add(ChatSource("SmolLM-135M ONNX", "On-Device Neural Model"))
         }
 
         return AiChatMessage(
             sender = ChatSender.Assistant,
             text = sb.toString().trim(),
-            sources = listOf(ChatSource(book.title, "Book Info")),
-        )
-    }
-
-    private fun handleGeneralFallback(
-        query: String,
-        book: BookEntity?,
-        chapters: List<ChapterEntity>,
-        bookmarks: List<BookmarkWithChapter>,
-    ): AiChatMessage {
-        val sources = mutableListOf<ChatSource>()
-        val sb = StringBuilder()
-
-        if (book != null) {
-            sb.append("Regarding *${book.title}*")
-            if (!book.author.isNullOrBlank()) sb.append(" by ${book.author}")
-            sb.append(":\n\n")
-            sources.add(ChatSource(book.title, "Book Context"))
-        }
-
-        sb.append("I can help you explore this audiobook in depth. Here are some things you can ask me:\n\n")
-        sb.append("• 📝 **\"Summarize my notes\"** — review your ${bookmarks.size} saved bookmarks\n")
-        sb.append("• 📖 **\"Define [word]\"** — look up definitions and literary terms\n")
-        sb.append("• 🌐 **\"Historical context of [topic]\"** — search encyclopedia lore online\n")
-        sb.append("• 🔍 **\"What is this book about?\"** — view themes, plot, and chapters")
-
-        if (modelManager?.isModelDownloaded() == true) {
-            sources.add(ChatSource("SmolLM-135M ONNX Ready", "On-Device Neural Model"))
-        }
-
-        return AiChatMessage(
-            sender = ChatSender.Assistant,
-            text = sb.toString(),
             sources = sources,
         )
     }
