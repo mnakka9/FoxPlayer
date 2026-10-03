@@ -26,5 +26,6 @@ class AppContainer(app: Application) {
     private val covers = CoverResolver(app, metadata)
     val themePreferences = ThemePreferences(app)
     val repository = AudiobookRepository(app, database, scanner, covers)
+    val onnxModelManager = repository.onnxModelManager
     val playbackManager = PlaybackManager(app, repository)
 }

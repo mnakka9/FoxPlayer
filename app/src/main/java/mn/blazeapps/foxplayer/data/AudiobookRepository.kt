@@ -12,12 +12,20 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
+import mn.blazeapps.foxplayer.data.onnx.EnrichedBookMetadata
+import mn.blazeapps.foxplayer.data.onnx.OnnxBookMetadataEngine
+import mn.blazeapps.foxplayer.data.onnx.OnnxModelManager
+import mn.blazeapps.foxplayer.data.search.WebBookSearchResolver
+
 class AudiobookRepository(
     private val context: Context,
     db: AudiobookDatabase,
     private val scanner: FolderScanner,
     private val covers: CoverResolver,
     private val onlineResolver: OnlineGenreResolver = OnlineGenreResolver(),
+    val onnxModelManager: OnnxModelManager = OnnxModelManager(context),
+    val onnxEngine: OnnxBookMetadataEngine = OnnxBookMetadataEngine(onnxModelManager),
+    val webSearchResolver: WebBookSearchResolver = WebBookSearchResolver(),
 ) {
     private val books = db.bookDao()
     private val chapters = db.chapterDao()
@@ -246,6 +254,43 @@ class AudiobookRepository(
             ?.joinToString(", ")
             ?.takeIf { it.isNotBlank() }
         books.updateGenres(bookId, cleaned)
+    }
+
+    suspend fun updateDescription(bookId: Long, description: String?) = withContext(Dispatchers.IO) {
+        books.updateDescription(bookId, description?.trim()?.takeIf { it.isNotBlank() })
+    }
+
+    suspend fun enrichBookMetadata(bookId: Long, customQuery: String? = null): EnrichedBookMetadata? = withContext(Dispatchers.IO) {
+        val book = books.getBook(bookId) ?: return@withContext null
+        val searchTitle = customQuery?.takeIf { it.isNotBlank() } ?: book.title
+        val searchResult = webSearchResolver.searchBook(searchTitle, book.author)
+        onnxEngine.enrich(searchTitle, book.author, searchResult)
+    }
+
+    suspend fun applyEnrichedMetadata(
+        bookId: Long,
+        genres: String?,
+        description: String?,
+        coverUrl: String?,
+    ): Boolean = withContext(Dispatchers.IO) {
+        var newCoverPath: String? = null
+        if (!coverUrl.isNullOrBlank()) {
+            newCoverPath = covers.saveCoverFromWeb(bookId, coverUrl)
+        }
+        val cleanedGenres = genres?.split(',')
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() && !GenreExtractor.isGeneric(it) }
+            ?.distinctBy { it.lowercase() }
+            ?.joinToString(", ")
+            ?.takeIf { it.isNotBlank() }
+
+        books.updateMetadata(
+            bookId = bookId,
+            genres = cleanedGenres,
+            description = description?.trim()?.takeIf { it.isNotBlank() },
+            coverPath = newCoverPath,
+        )
+        true
     }
 
     private fun persistReadPermission(treeUri: Uri) {

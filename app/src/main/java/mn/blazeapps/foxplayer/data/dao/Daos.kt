@@ -54,6 +54,12 @@ interface BookDao {
     @Query("UPDATE books SET genres = :genres WHERE id = :bookId")
     suspend fun updateGenres(bookId: Long, genres: String?)
 
+    @Query("UPDATE books SET description = :description WHERE id = :bookId")
+    suspend fun updateDescription(bookId: Long, description: String?)
+
+    @Query("UPDATE books SET genres = :genres, description = :description, coverPath = COALESCE(:coverPath, coverPath) WHERE id = :bookId")
+    suspend fun updateMetadata(bookId: Long, genres: String?, description: String?, coverPath: String?)
+
     @Query("DELETE FROM books WHERE id = :bookId")
     suspend fun deleteById(bookId: Long)
 }

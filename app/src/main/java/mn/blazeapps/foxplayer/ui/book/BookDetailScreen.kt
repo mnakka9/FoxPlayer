@@ -31,6 +31,8 @@ import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Pause
@@ -40,6 +42,12 @@ import androidx.compose.material.icons.filled.Replay30
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.LinearProgressIndicator
+import coil.compose.AsyncImage
+import mn.blazeapps.foxplayer.data.onnx.ModelDownloadState
+import mn.blazeapps.foxplayer.data.onnx.EnrichedBookMetadata
 import mn.blazeapps.foxplayer.ui.theme.BgDeep
 import mn.blazeapps.foxplayer.ui.theme.BgMid
 import mn.blazeapps.foxplayer.ui.theme.ColorBlueViolet
@@ -129,6 +137,9 @@ fun BookDetailScreen(
     var showEditGenresDialog by remember { mutableStateOf(false) }
     var editGenresText by remember { mutableStateOf("") }
     var isDetectingGenres by remember { mutableStateOf(false) }
+    var showEnrichDialog by remember { mutableStateOf(false) }
+    var isDescriptionExpanded by remember { mutableStateOf(false) }
+    val modelDownloadState by viewModel.modelDownloadState.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
 
     val live = player.bookId == bookId
@@ -179,6 +190,13 @@ fun BookDetailScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showEnrichDialog = true }) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = "Enrich with AI",
+                            tint = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                        )
+                    }
                     IconButton(onClick = { viewModel.rescanChapters() }) {
                         Icon(
                             Icons.Default.Refresh,
@@ -269,6 +287,22 @@ fun BookDetailScreen(
                                     color = MaterialTheme.colorScheme.secondary,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.clickable {
+                                        editGenresText = genres
+                                        showEditGenresDialog = true
+                                    },
+                                )
+                            }
+                            val description = book?.description
+                            if (!description.isNullOrBlank()) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = if (isDescriptionExpanded) 12 else 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.clickable { isDescriptionExpanded = !isDescriptionExpanded },
                                 )
                             }
                         }
@@ -616,6 +650,330 @@ fun BookDetailScreen(
             },
         )
     }
+
+    if (showEnrichDialog) {
+        EnrichMetadataDialog(
+            bookTitle = book?.title.orEmpty(),
+            bookAuthor = book?.author,
+            currentGenres = book?.genres.orEmpty(),
+            currentDescription = book?.description.orEmpty(),
+            modelDownloadState = modelDownloadState,
+            onDownloadModel = viewModel::downloadOnnxModel,
+            onEnrich = { query -> viewModel.enrichBookMetadata(query) },
+            onApply = { genres, description, coverUrl ->
+                viewModel.applyEnrichedMetadata(genres, description, coverUrl)
+                showEnrichDialog = false
+            },
+            onDismiss = { showEnrichDialog = false },
+        )
+    }
+}
+
+@Composable
+private fun EnrichMetadataDialog(
+    bookTitle: String,
+    bookAuthor: String?,
+    currentGenres: String,
+    currentDescription: String,
+    modelDownloadState: ModelDownloadState,
+    onDownloadModel: () -> Unit,
+    onEnrich: suspend (String) -> EnrichedBookMetadata?,
+    onApply: (genres: String?, description: String?, coverUrl: String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    var searchQuery by remember { mutableStateOf(bookTitle) }
+    var isAnalyzing by remember { mutableStateOf(false) }
+    var enrichedResult by remember { mutableStateOf<EnrichedBookMetadata?>(null) }
+    var editableGenres by remember { mutableStateOf(currentGenres) }
+    var editableDesc by remember { mutableStateOf(currentDescription) }
+    var updateCover by remember { mutableStateOf(true) }
+    val coroutineScope = rememberCoroutineScope()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = if (isDark) Color(0xF20D1230) else MaterialTheme.colorScheme.surface,
+        titleContentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+        textContentColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier.border(
+            BorderStroke(1.dp, if (isDark) GlassBorder else MaterialTheme.colorScheme.outline),
+            RoundedCornerShape(24.dp),
+        ),
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                SquircleIconBox(
+                    size = 38.dp,
+                    brush = Brush.linearGradient(listOf(ColorOrange, ColorOrangeLight)),
+                    shadowColor = Color(0x66F97316),
+                ) {
+                    Icon(
+                        Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Column {
+                    Text(
+                        "Enrich with AI",
+                        fontWeight = FontWeight.Bold,
+                        color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        "Web search & Local ONNX model",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        text = {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item {
+                    // ONNX Model Status Card
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant,
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            when (modelDownloadState) {
+                                is ModelDownloadState.Ready -> {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Default.AutoAwesome,
+                                            contentDescription = null,
+                                            tint = ColorOrangeLight,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                        Text(
+                                            "Local ONNX Model: SmolLM-135M Ready",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                                is ModelDownloadState.Downloading -> {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(
+                                            "Downloading SmolLM-135M ONNX (${(modelDownloadState.progress * 100).toInt()}%)...",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isDark) ColorBlueVioletLight else MaterialTheme.colorScheme.primary,
+                                        )
+                                        LinearProgressIndicator(
+                                            progress = { modelDownloadState.progress },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            color = ColorOrange,
+                                        )
+                                        Text(
+                                            "${modelDownloadState.bytesDownloaded / (1024 * 1024)} MB / ${modelDownloadState.totalBytes / (1024 * 1024)} MB",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                                        )
+                                    }
+                                }
+                                else -> {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                "Local ONNX Model (~78 MB)",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                                            )
+                                            Text(
+                                                "Optional on-device neural processing",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                                            )
+                                        }
+                                        TextButton(onClick = onDownloadModel) {
+                                            Icon(
+                                                Icons.Default.Download,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("Download")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    // Search Query Input
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        label = { Text("Search Query") },
+                        placeholder = { Text("Book title...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                            focusedContainerColor = if (isDark) InputBg else MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = if (isDark) InputBg else MaterialTheme.colorScheme.surface,
+                            focusedBorderColor = ColorBlueVioletLight,
+                            unfocusedBorderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
+                        ),
+                    )
+                }
+
+                item {
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                isAnalyzing = true
+                                val res = onEnrich(searchQuery)
+                                enrichedResult = res
+                                if (res != null) {
+                                    if (!res.genres.isNullOrBlank()) editableGenres = res.genres
+                                    if (!res.description.isNullOrBlank()) editableDesc = res.description
+                                }
+                                isAnalyzing = false
+                            }
+                        },
+                        enabled = !isAnalyzing && searchQuery.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ColorOrange,
+                            contentColor = Color.White,
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        if (isAnalyzing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Searching & Analyzing...")
+                        } else {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Search & Extract Metadata", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                if (enrichedResult != null) {
+                    item {
+                        val result = enrichedResult!!
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (result.usedOnnxModel) {
+                                PillBadge(
+                                    text = "Analyzed with ONNX Model",
+                                    backgroundColor = ColorOrangeDim,
+                                    borderColor = ColorOrange,
+                                    contentColor = ColorOrangeLight,
+                                )
+                            }
+
+                            // Cover preview
+                            if (!result.coverUrl.isNullOrBlank()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    AsyncImage(
+                                        model = result.coverUrl,
+                                        contentDescription = "Discovered cover",
+                                        modifier = Modifier
+                                            .size(64.dp)
+                                            .clip(RoundedCornerShape(8.dp)),
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "New Cover Discovered",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Bold,
+                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Checkbox(
+                                                checked = updateCover,
+                                                onCheckedChange = { updateCover = it },
+                                                colors = CheckboxDefaults.colors(checkedColor = ColorOrange),
+                                            )
+                                            Text(
+                                                "Update cover image",
+                                                style = MaterialTheme.typography.labelSmall,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Editable Genres
+                            OutlinedTextField(
+                                value = editableGenres,
+                                onValueChange = { editableGenres = it },
+                                label = { Text("Genres") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                            )
+
+                            // Editable Description
+                            OutlinedTextField(
+                                value = editableDesc,
+                                onValueChange = { editableDesc = it },
+                                label = { Text("Description") },
+                                minLines = 3,
+                                maxLines = 6,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val cover = if (updateCover) enrichedResult?.coverUrl else null
+                    onApply(editableGenres, editableDesc, cover)
+                },
+                enabled = enrichedResult != null,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ColorBlueViolet,
+                    contentColor = Color.White,
+                ),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Text("Apply to Book", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+    )
 }
 
 @Composable

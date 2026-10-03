@@ -87,6 +87,35 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    val modelDownloadState = repository.onnxModelManager.downloadState
+
+    fun isModelDownloaded(): Boolean = repository.onnxModelManager.isModelDownloaded()
+
+    fun downloadOnnxModel() {
+        viewModelScope.launch {
+            repository.onnxModelManager.downloadModel()
+        }
+    }
+
+    suspend fun enrichBookMetadata(customQuery: String? = null): mn.blazeapps.foxplayer.data.onnx.EnrichedBookMetadata? {
+        val currentBook = book.value ?: return null
+        return repository.enrichBookMetadata(currentBook.id, customQuery)
+    }
+
+    fun applyEnrichedMetadata(genres: String?, description: String?, coverUrl: String?) {
+        val id = bookId.value ?: return
+        viewModelScope.launch {
+            repository.applyEnrichedMetadata(id, genres, description, coverUrl)
+        }
+    }
+
+    fun updateDescription(description: String) {
+        val id = bookId.value ?: return
+        viewModelScope.launch {
+            repository.updateDescription(id, description)
+        }
+    }
+
     fun updateGenres(genres: String) {
         val id = bookId.value ?: return
         viewModelScope.launch {
