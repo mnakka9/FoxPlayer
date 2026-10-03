@@ -1,12 +1,14 @@
 package mn.blazeapps.foxplayer.ui.book
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -19,9 +21,8 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,10 +30,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import mn.blazeapps.foxplayer.data.ai.AiChatMessage
 import mn.blazeapps.foxplayer.data.ai.ChatSender
@@ -40,12 +46,12 @@ import mn.blazeapps.foxplayer.data.ai.ChatSource
 import mn.blazeapps.foxplayer.ui.theme.*
 
 @Composable
-fun BookAiChatPane(
+fun BookAiChatDialog(
     messages: List<AiChatMessage>,
     isGenerating: Boolean,
     onSendMessage: (String) -> Unit,
     onClearChat: () -> Unit,
-    modifier: Modifier = Modifier,
+    onDismiss: () -> Unit,
 ) {
     val isDark = MaterialTheme.colorScheme.background == BgDeep
     var inputText by remember { mutableStateOf("") }
@@ -58,153 +64,311 @@ fun BookAiChatPane(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .clip(RoundedCornerShape(16.dp))
-            .background(if (isDark) GlassBg else MaterialTheme.colorScheme.surface)
-            .border(
-                BorderStroke(1.dp, if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant),
-                RoundedCornerShape(16.dp),
-            )
-            .padding(10.dp),
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
     ) {
-        // Top action bar: only the internal notes filter + optional clear chat
-        Row(
+        Card(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+                .fillMaxWidth(0.95f)
+                .fillMaxHeight(0.88f)
+                .imePadding(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isDark) Color(0xF20D1230) else MaterialTheme.colorScheme.surface,
+            ),
+            border = BorderStroke(
+                1.dp,
+                if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant,
+            ),
         ) {
-            SuggestionChip(
-                onClick = { onSendMessage("Search my bookmark notes") },
-                label = { Text("📝 Search Notes", fontSize = 12.sp, fontWeight = FontWeight.Medium) },
-                icon = {
-                    Icon(
-                        Icons.Default.Bookmark,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = ColorBlueVioletLight,
-                    )
-                },
-                colors = SuggestionChipDefaults.suggestionChipColors(
-                    containerColor = if (isDark) GlassBgStrong else MaterialTheme.colorScheme.surfaceVariant,
-                    labelColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
-                ),
-                border = SuggestionChipDefaults.suggestionChipBorder(
-                    enabled = true,
-                    borderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
-                ),
-            )
-
-            if (messages.isNotEmpty()) {
-                TextButton(
-                    onClick = onClearChat,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                ) {
-                    Icon(
-                        Icons.Default.Clear,
-                        contentDescription = "Clear Chat",
-                        modifier = Modifier.size(13.dp),
-                        tint = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        "Clear",
-                        fontSize = 11.sp,
-                        color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(6.dp))
-
-        // Chat message history
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            items(messages, key = { it.id }) { msg ->
-                ChatBubble(msg = msg, isDark = isDark)
-            }
-
-            if (isGenerating) {
-                item {
-                    GeneratingBubble(isDark = isDark)
-                }
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        // Input bar
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            OutlinedTextField(
-                value = inputText,
-                onValueChange = { inputText = it },
-                placeholder = {
-                    Text(
-                        "Search notes or ask anything online...",
-                        fontSize = 13.sp,
-                        color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
-                    )
-                },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(20.dp),
-                enabled = !isGenerating,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
-                    unfocusedTextColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
-                    focusedContainerColor = if (isDark) InputBg else MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = if (isDark) InputBg else MaterialTheme.colorScheme.surface,
-                    focusedBorderColor = ColorBlueVioletLight,
-                    unfocusedBorderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = {
-                    val query = inputText.trim()
-                    if (query.isNotBlank()) {
-                        inputText = ""
-                        onSendMessage(query)
-                    }
-                }),
-            )
-
-            IconButton(
-                onClick = {
-                    val query = inputText.trim()
-                    if (query.isNotBlank()) {
-                        inputText = ""
-                        onSendMessage(query)
-                    }
-                },
-                enabled = !isGenerating && inputText.isNotBlank(),
+            Column(
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (!isGenerating && inputText.isNotBlank()) {
-                            Brush.linearGradient(listOf(ColorOrange, ColorOrangeLight))
-                        } else {
-                            Brush.linearGradient(listOf(Color.Gray.copy(alpha = 0.3f), Color.Gray.copy(alpha = 0.3f)))
-                        }
-                    ),
+                    .fillMaxSize()
+                    .padding(14.dp),
             ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "Send",
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp),
+                // Header: icon, title, subtitle & close button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        SquircleIconBox(
+                            size = 38.dp,
+                            brush = Brush.linearGradient(listOf(ColorBlueViolet, ColorOrange)),
+                            shadowColor = Color(0x666366F1),
+                        ) {
+                            Icon(
+                                Icons.Default.Forum,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        Column {
+                            Text(
+                                "AI Companion Chat",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                "Web search & Notes",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Action row: single internal notes filter + optional clear chat
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SuggestionChip(
+                        onClick = { onSendMessage("Search my bookmark notes") },
+                        label = { Text("📝 Search Notes", fontSize = 12.sp, fontWeight = FontWeight.Medium) },
+                        icon = {
+                            Icon(
+                                Icons.Default.Bookmark,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = ColorBlueVioletLight,
+                            )
+                        },
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = if (isDark) GlassBgStrong else MaterialTheme.colorScheme.surfaceVariant,
+                            labelColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                        ),
+                        border = SuggestionChipDefaults.suggestionChipBorder(
+                            enabled = true,
+                            borderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
+                        ),
+                    )
+
+                    if (messages.isNotEmpty()) {
+                        TextButton(
+                            onClick = onClearChat,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Clear,
+                                contentDescription = "Clear Chat",
+                                modifier = Modifier.size(13.dp),
+                                tint = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "Clear",
+                                fontSize = 11.sp,
+                                color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                // Chat history container with interactive vertical scrollbar
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                ) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(end = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(messages, key = { it.id }) { msg ->
+                            ChatBubble(msg = msg, isDark = isDark)
+                        }
+
+                        if (isGenerating) {
+                            item {
+                                GeneratingBubble(isDark = isDark)
+                            }
+                        }
+                    }
+
+                    // Interactive scrollbar
+                    ChatScrollbar(
+                        listState = listState,
+                        coroutineScope = coroutineScope,
+                        isDark = isDark,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .width(8.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Input bar
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        placeholder = {
+                            Text(
+                                "Search notes or ask anything online...",
+                                fontSize = 13.sp,
+                                color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                            )
+                        },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(20.dp),
+                        enabled = !isGenerating,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                            focusedContainerColor = if (isDark) InputBg else MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = if (isDark) InputBg else MaterialTheme.colorScheme.surface,
+                            focusedBorderColor = ColorBlueVioletLight,
+                            unfocusedBorderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
+                        ),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = {
+                            val query = inputText.trim()
+                            if (query.isNotBlank()) {
+                                inputText = ""
+                                onSendMessage(query)
+                            }
+                        }),
+                    )
+
+                    IconButton(
+                        onClick = {
+                            val query = inputText.trim()
+                            if (query.isNotBlank()) {
+                                inputText = ""
+                                onSendMessage(query)
+                            }
+                        },
+                        enabled = !isGenerating && inputText.isNotBlank(),
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (inputText.isNotBlank()) {
+                                    Brush.linearGradient(listOf(ColorBlueViolet, ColorOrange))
+                                } else {
+                                    Brush.linearGradient(listOf(Color(0x336366F1), Color(0x33F97316)))
+                                }
+                            ),
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Send",
+                            tint = if (inputText.isNotBlank()) Color.White else if (isDark) TextMuted else Color.LightGray,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatScrollbar(
+    listState: LazyListState,
+    coroutineScope: CoroutineScope,
+    isDark: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    var isDragging by remember { mutableStateOf(false) }
+
+    BoxWithConstraints(modifier = modifier) {
+        val totalItems = listState.layoutInfo.totalItemsCount
+        val visibleItems = listState.layoutInfo.visibleItemsInfo
+        val trackHeightPx = constraints.maxHeight.toFloat()
+
+        if (totalItems > 1 && visibleItems.isNotEmpty() && trackHeightPx > 0) {
+            val visibleCount = visibleItems.size
+            val thumbHeightFraction = (visibleCount.toFloat() / totalItems).coerceIn(0.12f, 1f)
+            val thumbHeightPx = trackHeightPx * thumbHeightFraction
+
+            val firstVisibleIndex = listState.firstVisibleItemIndex
+            val maxIndex = (totalItems - visibleCount).coerceAtLeast(1)
+            val scrollProgress = (firstVisibleIndex.toFloat() / maxIndex).coerceIn(0f, 1f)
+            val thumbOffsetPx = (trackHeightPx - thumbHeightPx) * scrollProgress
+
+            // Interactive track
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (isDark) Color(0x1AFFFFFF) else Color(0x1A000000))
+                    .pointerInput(totalItems) {
+                        detectTapGestures { offset ->
+                            val touchRatio = (offset.y / trackHeightPx).coerceIn(0f, 1f)
+                            val targetIndex = (touchRatio * (totalItems - 1)).toInt()
+                            coroutineScope.launch {
+                                listState.scrollToItem(targetIndex)
+                            }
+                        }
+                    }
+                    .pointerInput(totalItems) {
+                        detectDragGestures(
+                            onDragStart = { isDragging = true },
+                            onDragEnd = { isDragging = false },
+                            onDragCancel = { isDragging = false },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                val touchRatio = (change.position.y / trackHeightPx).coerceIn(0f, 1f)
+                                val targetIndex = (touchRatio * (totalItems - 1)).toInt()
+                                coroutineScope.launch {
+                                    listState.scrollToItem(targetIndex)
+                                }
+                            }
+                        )
+                    }
+            ) {
+                // Draggable thumb indicator
+                val density = LocalDensity.current
+                val thumbOffsetDp = with(density) { thumbOffsetPx.toDp() }
+                val thumbHeightDp = with(density) { thumbHeightPx.toDp() }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .offset(y = thumbOffsetDp)
+                        .height(thumbHeightDp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            if (isDragging) {
+                                Brush.verticalGradient(listOf(ColorOrange, ColorOrangeLight))
+                            } else {
+                                Brush.verticalGradient(listOf(ColorBlueVioletLight, ColorBlueViolet))
+                            }
+                        ),
                 )
             }
         }
@@ -218,37 +382,26 @@ private fun ChatBubble(
 ) {
     val isUser = msg.sender == ChatSender.User
 
-    Column(
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
     ) {
         if (!isUser) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(bottom = 4.dp),
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(ColorBlueViolet, ColorOrange))),
+                contentAlignment = Alignment.Center,
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(20.dp)
-                        .clip(CircleShape)
-                        .background(Brush.linearGradient(listOf(ColorOrange, ColorOrangeLight))),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Default.AutoAwesome,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(12.dp),
-                    )
-                }
-                Text(
-                    text = "AI Companion",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                Icon(
+                    Icons.Default.AutoAwesome,
+                    contentDescription = "AI",
+                    tint = Color.White,
+                    modifier = Modifier.size(15.dp),
                 )
             }
+            Spacer(Modifier.width(8.dp))
         }
 
         Surface(
@@ -264,21 +417,22 @@ private fun ChatBubble(
                 bottomEnd = if (isUser) 4.dp else 16.dp,
             ),
             border = if (!isUser) {
-                BorderStroke(1.dp, if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant)
+                BorderStroke(1.dp, if (isDark) GlassBorderSubtle else MaterialTheme.colorScheme.outlineVariant)
             } else null,
-            modifier = Modifier.widthIn(max = 320.dp),
+            modifier = Modifier.widthIn(max = 310.dp),
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(
                     text = msg.text,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 19.sp),
+                    style = MaterialTheme.typography.bodyMedium,
                     color = if (isUser) Color.White else if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                    lineHeight = 20.sp,
                 )
 
                 if (msg.sources.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                     ) {

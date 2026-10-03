@@ -141,6 +141,7 @@ fun BookDetailScreen(
     var editGenresText by remember { mutableStateOf("") }
     var isDetectingGenres by remember { mutableStateOf(false) }
     var showEnrichDialog by remember { mutableStateOf(false) }
+    var showChatDialog by remember { mutableStateOf(false) }
     var isDescriptionExpanded by remember { mutableStateOf(false) }
     val modelDownloadState by viewModel.modelDownloadState.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
@@ -200,11 +201,11 @@ fun BookDetailScreen(
                             tint = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
                         )
                     }
-                    IconButton(onClick = { viewModel.setPane(DetailPane.AIChat) }) {
+                    IconButton(onClick = { showChatDialog = true }) {
                         Icon(
                             Icons.Default.Forum,
                             contentDescription = "AI Companion Chat",
-                            tint = if (pane == DetailPane.AIChat) ColorOrange else if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (showChatDialog) ColorOrange else if (isDark) ColorBlueVioletLight else MaterialTheme.colorScheme.primary,
                         )
                     }
                     IconButton(onClick = { viewModel.rescanChapters() }) {
@@ -414,39 +415,6 @@ fun BookDetailScreen(
                     ),
                     shape = RoundedCornerShape(20.dp),
                 )
-                FilterChip(
-                    selected = pane == DetailPane.AIChat,
-                    onClick = { viewModel.setPane(DetailPane.AIChat) },
-                    label = {
-                        Text(
-                            "AI Chat",
-                            fontWeight = if (pane == DetailPane.AIChat) FontWeight.Bold else FontWeight.Medium,
-                            color = if (pane == DetailPane.AIChat) Color.White else if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurface,
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            tint = if (pane == DetailPane.AIChat) Color.White else ColorOrangeLight,
-                        )
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant,
-                        selectedContainerColor = ColorOrange,
-                        labelColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurface,
-                        selectedLabelColor = Color.White,
-                        iconColor = ColorOrangeLight,
-                        selectedLeadingIconColor = Color.White,
-                    ),
-                    border = FilterChipDefaults.filterChipBorder(
-                        enabled = true,
-                        selected = pane == DetailPane.AIChat,
-                        borderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
-                        selectedBorderColor = ColorOrange,
-                    ),
-                    shape = RoundedCornerShape(20.dp),
-                )
                 if (pane == DetailPane.Bookmarks) {
                     Spacer(Modifier.weight(1f))
                     GlassIconButton(
@@ -478,15 +446,6 @@ fun BookDetailScreen(
                         bookmarks = bookmarks,
                         onSelect = { viewModel.jumpToBookmark(it.bookmark) },
                         onDelete = { viewModel.deleteBookmark(it.bookmark) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                DetailPane.AIChat -> {
-                    BookAiChatPane(
-                        messages = chatMessages,
-                        isGenerating = isChatGenerating,
-                        onSendMessage = viewModel::sendChatMessage,
-                        onClearChat = viewModel::clearChat,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -722,6 +681,16 @@ fun BookDetailScreen(
                 showEnrichDialog = false
             },
             onDismiss = { showEnrichDialog = false },
+        )
+    }
+
+    if (showChatDialog) {
+        BookAiChatDialog(
+            messages = chatMessages,
+            isGenerating = isChatGenerating,
+            onSendMessage = viewModel::sendChatMessage,
+            onClearChat = viewModel::clearChat,
+            onDismiss = { showChatDialog = false },
         )
     }
 }

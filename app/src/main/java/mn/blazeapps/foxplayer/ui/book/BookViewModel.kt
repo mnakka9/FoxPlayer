@@ -22,7 +22,7 @@ import mn.blazeapps.foxplayer.data.ai.ChatSender
 import mn.blazeapps.foxplayer.data.ai.ChatSource
 import kotlinx.coroutines.launch
 
-enum class DetailPane { Chapters, Bookmarks, AIChat }
+enum class DetailPane { Chapters, Bookmarks }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class BookViewModel(application: Application) : AndroidViewModel(application) {
