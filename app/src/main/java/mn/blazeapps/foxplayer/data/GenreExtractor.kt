@@ -129,8 +129,13 @@ object GenreExtractor {
         return matchedGenres.take(3)
     }
 
-    fun cleanTitleForSearch(title: String): String {
+    fun cleanTitleForSearch(title: String, author: String? = null): String {
         var clean = title.trim()
+        if (!author.isNullOrBlank() && !author.equals("Unknown author", ignoreCase = true)) {
+            val auth = author.trim()
+            clean = clean.replace(Regex("(?i)[,\\s-]+(?:by\\s+)?\\Q$auth\\E$"), "")
+            clean = clean.replace(Regex("(?i)^\\Q$auth\\E\\s*-\\s*"), "")
+        }
         clean = clean.replace(Regex("(?i)\\s*[\\[(](?:unabridged|abridged|audiobook|audio\\s+edition)[\\])]"), "")
         clean = clean.replace(Regex("(?i)\\s*[\\[(](?:a\\s+novel|book\\s*\\d+)[\\])]"), "")
         clean = clean.replace(Regex("(?i)\\s*-\\s*(?:unabridged|audiobook)"), "")

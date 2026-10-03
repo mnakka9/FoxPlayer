@@ -3,6 +3,7 @@ package mn.blazeapps.foxplayer.data.onnx
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import ai.onnxruntime.TensorInfo
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -69,15 +70,50 @@ class OnnxBookMetadataEngine(
             val inputTensor = OnnxTensor.createTensor(env, inputIdsBuffer, shape)
             val maskTensor = OnnxTensor.createTensor(env, attentionMaskBuffer, shape)
 
-            val inputs = mapOf(
-                "input_ids" to inputTensor,
-                "attention_mask" to maskTensor,
-            )
+            val inputs = mutableMapOf<String, OnnxTensor>()
+            inputs["input_ids"] = inputTensor
+            inputs["attention_mask"] = maskTensor
+            val tensorsToClose = mutableListOf<OnnxTensor>(inputTensor, maskTensor)
 
-            log(logs, "[ONNX Engine] Executing tensor graph inference on device CPU...")
+            // Fulfill required KV-cache (past_key_values.*) and position tensors
+            for ((name, nodeInfo) in currentSession.inputInfo) {
+                if (inputs.containsKey(name)) continue
+                if (name == "position_ids") {
+                    val posBuffer = LongBuffer.wrap(LongArray(tokenIds.size) { it.toLong() })
+                    val posTensor = OnnxTensor.createTensor(env, posBuffer, shape)
+                    inputs[name] = posTensor
+                    tensorsToClose.add(posTensor)
+                } else if (name.startsWith("past_key_values")) {
+                    val tensorInfo = nodeInfo.info as? TensorInfo
+                    val nodeShape = tensorInfo?.shape
+                    // Shape: [batch_size, num_key_value_heads, past_sequence_length, head_dim]
+                    val kvShape = if (nodeShape != null && nodeShape.size == 4) {
+                        longArrayOf(
+                            if (nodeShape[0] > 0) nodeShape[0] else 1L,
+                            if (nodeShape[1] > 0) nodeShape[1] else 3L,
+                            0L, // 0 past tokens for initial prefill prompt
+                            if (nodeShape[3] > 0) nodeShape[3] else 64L,
+                        )
+                    } else {
+                        longArrayOf(1L, 3L, 0L, 64L)
+                    }
+                    val emptyBuf = java.nio.FloatBuffer.allocate(0)
+                    val kvTensor = OnnxTensor.createTensor(env, emptyBuf, kvShape)
+                    inputs[name] = kvTensor
+                    tensorsToClose.add(kvTensor)
+                }
+            }
+
+            log(logs, "[ONNX Engine] Executing tensor graph inference on device CPU (${inputs.size} inputs)...")
             val startTime = System.currentTimeMillis()
 
-            val result = currentSession.run(inputs)
+            val result = try {
+                currentSession.run(inputs)
+            } finally {
+                for (t in tensorsToClose) {
+                    try { t.close() } catch (_: Exception) {}
+                }
+            }
             val durationMs = System.currentTimeMillis() - startTime
 
             log(logs, "[ONNX Engine] Forward pass completed in ${durationMs}ms!")
@@ -93,8 +129,6 @@ class OnnxBookMetadataEngine(
                 }
             }
 
-            inputTensor.close()
-            maskTensor.close()
             result.close()
 
             // Disambiguate genres and refine description
@@ -150,11 +184,9 @@ class OnnxBookMetadataEngine(
     }
 
     private fun buildSmolLmPrompt(title: String, author: String?, searchResult: WebSearchResult): String {
-        val snippets = searchResult.candidates
-            .mapNotNull { it.description }
-            .take(2)
-            .joinToString("\n")
-            .take(300)
+        val snippets = (searchResult.bestDescription
+            ?: searchResult.candidates.mapNotNull { it.description }.joinToString("\n"))
+            .take(400)
 
         return buildString {
             append("<|im_start|>system\n")

@@ -10,9 +10,9 @@ import java.net.URLEncoder
 class OnlineGenreResolver {
 
     suspend fun resolveOnline(title: String, author: String?): String? = withContext(Dispatchers.IO) {
-        val cleanTitle = GenreExtractor.cleanTitleForSearch(title)
-        if (cleanTitle.isBlank()) return@withContext null
         val cleanAuthor = GenreExtractor.cleanAuthorForSearch(author)
+        val cleanTitle = GenreExtractor.cleanTitleForSearch(title, cleanAuthor)
+        if (cleanTitle.isBlank()) return@withContext null
 
         // 1. Try search with title and author
         val subjectsWithAuthor = queryOpenLibrary(cleanTitle, cleanAuthor)

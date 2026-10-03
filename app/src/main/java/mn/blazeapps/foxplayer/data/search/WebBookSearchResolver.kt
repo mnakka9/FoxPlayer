@@ -34,21 +34,25 @@ class WebBookSearchResolver {
 
     suspend fun searchBook(title: String, author: String?): WebSearchResult = withContext(Dispatchers.IO) {
         val logs = mutableListOf<String>()
-        val cleanTitle = GenreExtractor.cleanTitleForSearch(title)
         val cleanAuthor = GenreExtractor.cleanAuthorForSearch(author)
+        val cleanTitle = GenreExtractor.cleanTitleForSearch(title, cleanAuthor)
         val candidates = mutableListOf<BookCandidate>()
 
         log(logs, "[WebSearch] Initiating search for title='$cleanTitle'${if (cleanAuthor != null) ", author='$cleanAuthor'" else ""}")
 
-        // 1. Google Books API
+        // 1. Apple Books / iTunes Audiobook API (Audiobook native, high-res covers, full synopsis)
+        val itunesResults = queryItunesAudiobooks(cleanTitle, cleanAuthor, logs)
+        candidates += itunesResults
+
+        // 2. Google Books API
         val googleResults = queryGoogleBooks(cleanTitle, cleanAuthor, logs)
         candidates += googleResults
 
-        // 2. Open Library Search API
+        // 3. Open Library Search API
         val openLibResults = queryOpenLibrary(cleanTitle, cleanAuthor, logs)
         candidates += openLibResults
 
-        // 3. Fallback to DuckDuckGo if no descriptions found
+        // 4. Fallback to DuckDuckGo if no descriptions found
         val hasAnyDesc = candidates.any { !it.description.isNullOrBlank() }
         if (!hasAnyDesc) {
             log(logs, "[WebSearch] No descriptions in API results; running web search fallback...")
@@ -94,6 +98,115 @@ class WebBookSearchResolver {
     private fun log(logs: MutableList<String>, message: String) {
         logs.add(message)
         Log.i(TAG, message)
+    }
+
+    private fun queryItunesAudiobooks(title: String, author: String?, logs: MutableList<String>): List<BookCandidate> {
+        val candidates = mutableListOf<BookCandidate>()
+        try {
+            val term = buildString {
+                append(title)
+                if (!author.isNullOrBlank() && !author.equals("Unknown author", ignoreCase = true)) {
+                    append(" ").append(author)
+                }
+            }
+            val encodedTerm = URLEncoder.encode(term, "UTF-8")
+            val urlString = "https://itunes.apple.com/search?term=$encodedTerm&entity=audiobook&limit=3"
+            log(logs, "[iTunes] Querying Apple Audiobook catalog: $urlString")
+
+            val connection = (URL(urlString).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 6000
+                readTimeout = 6000
+                instanceFollowRedirects = true
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; FoxPlayer/1.1.0)")
+                setRequestProperty("Accept", "application/json")
+            }
+
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                log(logs, "[iTunes] HTTP ${connection.responseCode}")
+                connection.disconnect()
+                return emptyList()
+            }
+
+            val response = connection.inputStream.bufferedReader().use { it.readText() }
+            connection.disconnect()
+
+            val json = JSONObject(response)
+            val results = json.optJSONArray("results") ?: return emptyList()
+            log(logs, "[iTunes] Found ${results.length()} audiobook matches")
+
+            for (i in 0 until results.length()) {
+                val item = results.optJSONObject(i) ?: continue
+                val itemTitle = item.optString("collectionName").ifBlank {
+                    item.optString("trackName").ifBlank { title }
+                }
+                val artistName = item.optString("artistName").takeIf { it.isNotBlank() }
+                val rawDesc = item.optString("description").takeIf { it.isNotBlank() }
+                val genre = item.optString("primaryGenreName").takeIf { it.isNotBlank() }
+                val rawArtwork = item.optString("artworkUrl100")
+                val coverUrl = if (rawArtwork.isNotBlank()) {
+                    rawArtwork.replace("/100x100bb.", "/600x600bb.")
+                } else null
+
+                val cleanDesc = rawDesc?.let { sanitizeDescription(it) }
+                val categories = if (genre != null) listOf(genre) else emptyList()
+
+                candidates += BookCandidate(
+                    title = itemTitle,
+                    author = artistName,
+                    description = cleanDesc,
+                    categories = categories,
+                    coverUrl = coverUrl,
+                    source = "Apple Books",
+                )
+            }
+
+            // If title+author had 0 results and author was specified, try title alone
+            if (candidates.isEmpty() && !author.isNullOrBlank()) {
+                log(logs, "[iTunes] No matches with author, retrying with title alone...")
+                val fallbackUrl = "https://itunes.apple.com/search?term=${URLEncoder.encode(title, "UTF-8")}&entity=audiobook&limit=2"
+                val fbConn = (URL(fallbackUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; FoxPlayer/1.1.0)")
+                    setRequestProperty("Accept", "application/json")
+                }
+                if (fbConn.responseCode == HttpURLConnection.HTTP_OK) {
+                    val fbResp = fbConn.inputStream.bufferedReader().use { it.readText() }
+                    val fbJson = JSONObject(fbResp)
+                    val fbResults = fbJson.optJSONArray("results")
+                    if (fbResults != null) {
+                        for (i in 0 until fbResults.length()) {
+                            val item = fbResults.optJSONObject(i) ?: continue
+                            val itemTitle = item.optString("collectionName").ifBlank {
+                                item.optString("trackName").ifBlank { title }
+                            }
+                            val artistName = item.optString("artistName").takeIf { it.isNotBlank() }
+                            val rawDesc = item.optString("description").takeIf { it.isNotBlank() }
+                            val genre = item.optString("primaryGenreName").takeIf { it.isNotBlank() }
+                            val rawArtwork = item.optString("artworkUrl100")
+                            val coverUrl = if (rawArtwork.isNotBlank()) {
+                                rawArtwork.replace("/100x100bb.", "/600x600bb.")
+                            } else null
+                            val cleanDesc = rawDesc?.let { sanitizeDescription(it) }
+                            val categories = if (genre != null) listOf(genre) else emptyList()
+                            candidates += BookCandidate(
+                                title = itemTitle,
+                                author = artistName,
+                                description = cleanDesc,
+                                categories = categories,
+                                coverUrl = coverUrl,
+                                source = "Apple Books",
+                            )
+                        }
+                    }
+                }
+                fbConn.disconnect()
+            }
+        } catch (e: Exception) {
+            log(logs, "[iTunes] Exception: ${e.message}")
+        }
+        return candidates
     }
 
     private fun queryGoogleBooks(title: String, author: String?, logs: MutableList<String>): List<BookCandidate> {

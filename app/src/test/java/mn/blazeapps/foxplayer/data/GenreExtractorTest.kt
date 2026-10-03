@@ -81,6 +81,14 @@ class GenreExtractorTest {
     }
 
     @Test
+    fun cleanTitleForSearchStripsAuthorSuffix() {
+        assertEquals("Storm Mage", GenreExtractor.cleanTitleForSearch("Storm Mage, Mark Torr", "Mark Torr"))
+        assertEquals("Storm Mage", GenreExtractor.cleanTitleForSearch("Storm Mage - Mark Torr", "Mark Torr"))
+        assertEquals("Storm Mage", GenreExtractor.cleanTitleForSearch("Storm Mage by Mark Torr", "Mark Torr"))
+        assertEquals("Storm Mage", GenreExtractor.cleanTitleForSearch("Mark Torr - Storm Mage", "Mark Torr"))
+    }
+
+    @Test
     fun cleanAuthorForSearchStripsNarratorDetails() {
         assertEquals("Frank Herbert", GenreExtractor.cleanAuthorForSearch("Frank Herbert (narrated by Scott Brick)"))
         assertEquals("Andy Weir", GenreExtractor.cleanAuthorForSearch("Andy Weir read by Ray Porter"))
