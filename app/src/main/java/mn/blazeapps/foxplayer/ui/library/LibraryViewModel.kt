@@ -15,10 +15,24 @@ import kotlinx.coroutines.launch
 import mn.blazeapps.foxplayer.FoxPlayerApplication
 import mn.blazeapps.foxplayer.data.ImportException
 import mn.blazeapps.foxplayer.data.LibraryBook
+import mn.blazeapps.foxplayer.data.onnx.ModelDownloadState
 
 class LibraryViewModel(application: Application) : AndroidViewModel(application) {
     private val container = (application as FoxPlayerApplication).container
     private val repository = container.repository
+
+    val modelDownloadState: StateFlow<ModelDownloadState> = repository.onnxModelManager.downloadState
+    fun isModelDownloaded(): Boolean = repository.onnxModelManager.isModelDownloaded()
+    fun getModelSizeBytes(): Long = repository.onnxModelManager.getModelSizeBytes()
+    fun getFreeSpaceBytes(): Long = repository.onnxModelManager.getFreeSpaceBytes()
+
+    fun downloadOnnxModel() {
+        viewModelScope.launch {
+            repository.onnxModelManager.downloadModel()
+        }
+    }
+
+    fun deleteOnnxModel(): Boolean = repository.onnxModelManager.deleteModel()
 
     val books: StateFlow<List<LibraryBook>> = repository.observeLibrary()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

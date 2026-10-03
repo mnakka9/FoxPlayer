@@ -153,12 +153,16 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     val modelDownloadState = repository.onnxModelManager.downloadState
 
     fun isModelDownloaded(): Boolean = repository.onnxModelManager.isModelDownloaded()
+    fun getModelSizeBytes(): Long = repository.onnxModelManager.getModelSizeBytes()
+    fun getFreeSpaceBytes(): Long = repository.onnxModelManager.getFreeSpaceBytes()
 
     fun downloadOnnxModel() {
         viewModelScope.launch {
             repository.onnxModelManager.downloadModel()
         }
     }
+
+    fun deleteOnnxModel(): Boolean = repository.onnxModelManager.deleteModel()
 
     suspend fun enrichBookMetadata(customQuery: String? = null): mn.blazeapps.foxplayer.data.onnx.EnrichedBookMetadata? {
         val currentBook = book.value ?: return null

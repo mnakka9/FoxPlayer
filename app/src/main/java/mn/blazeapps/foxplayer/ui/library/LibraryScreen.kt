@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -102,6 +103,7 @@ import mn.blazeapps.foxplayer.ui.theme.ColorRed
 import mn.blazeapps.foxplayer.ui.theme.TextMuted
 import mn.blazeapps.foxplayer.ui.theme.TextPrimary
 import mn.blazeapps.foxplayer.ui.theme.TextSecondary
+import mn.blazeapps.foxplayer.ui.settings.SettingsDialog
 import mn.blazeapps.foxplayer.ui.theme.ThemeMode
 import java.io.File
 
@@ -122,9 +124,11 @@ fun LibraryScreen(
     val availableGenres by viewModel.availableGenres.collectAsStateWithLifecycle()
     val importing by viewModel.importing.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val modelDownloadState by viewModel.modelDownloadState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var pendingDelete by remember { mutableStateOf<LibraryBook?>(null) }
     var showThemePicker by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
     val isDark = MaterialTheme.colorScheme.background == BgDeep
 
     LaunchedEffect(message) {
@@ -171,6 +175,12 @@ fun LibraryScreen(
                                     Icons.Default.DarkMode
                                 },
                                 contentDescription = "Change theme",
+                            )
+                        }
+                        IconButton(onClick = { showSettingsDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Settings",
                             )
                         }
                     },
@@ -315,6 +325,20 @@ fun LibraryScreen(
                     Text("Light", color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
+        )
+    }
+
+    if (showSettingsDialog) {
+        SettingsDialog(
+            modelDownloadState = modelDownloadState,
+            isModelDownloaded = viewModel.isModelDownloaded(),
+            modelSizeBytes = viewModel.getModelSizeBytes(),
+            freeSpaceBytes = viewModel.getFreeSpaceBytes(),
+            themeMode = themeMode,
+            onThemeModeChange = onThemeModeChange,
+            onDownloadModel = viewModel::downloadOnnxModel,
+            onDeleteModel = { viewModel.deleteOnnxModel() },
+            onDismiss = { showSettingsDialog = false },
         )
     }
 

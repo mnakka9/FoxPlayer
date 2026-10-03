@@ -170,6 +170,8 @@ private fun FoxPlayerNav(
             BookDetailScreen(
                 bookId = bookId,
                 viewModel = bookViewModel,
+                themeMode = themeMode,
+                onThemeModeChange = onThemeModeChange,
                 onBack = { navController.popBackStack() },
                 onRestoreAccess = {
                     rebindBookId = bookId

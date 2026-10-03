@@ -55,6 +55,10 @@ class OnnxModelManager(private val context: Context) {
         return if (file.exists()) file.length() else 0L
     }
 
+    fun getFreeSpaceBytes(): Long {
+        return modelDir().usableSpace
+    }
+
     fun deleteModel(): Boolean {
         val file = getModelFile()
         val deleted = if (file.exists()) file.delete() else true
@@ -118,7 +122,7 @@ class OnnxModelManager(private val context: Context) {
 
             val finalConnection = connection ?: throw java.io.IOException("Failed to connect after $redirectCount redirects")
 
-            val totalBytes = finalConnection.contentLengthLong.takeIf { it > 0 } ?: (117L * 1024 * 1024)
+            val totalBytes = finalConnection.contentLengthLong.takeIf { it > 0 } ?: (272L * 1024 * 1024)
             var bytesRead = 0L
 
             finalConnection.inputStream.use { input ->

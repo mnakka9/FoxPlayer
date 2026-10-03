@@ -40,6 +40,8 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Replay30
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.style.TextAlign
@@ -69,6 +71,8 @@ import mn.blazeapps.foxplayer.ui.theme.SquircleIconBox
 import mn.blazeapps.foxplayer.ui.theme.TextMuted
 import mn.blazeapps.foxplayer.ui.theme.TextPrimary
 import mn.blazeapps.foxplayer.ui.theme.TextSecondary
+import mn.blazeapps.foxplayer.ui.settings.SettingsDialog
+import mn.blazeapps.foxplayer.ui.theme.ThemeMode
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -123,6 +127,8 @@ import mn.blazeapps.foxplayer.ui.library.CoverArt
 fun BookDetailScreen(
     bookId: Long,
     viewModel: BookViewModel,
+    themeMode: ThemeMode = ThemeMode.DARK,
+    onThemeModeChange: (ThemeMode) -> Unit = {},
     onBack: () -> Unit,
     onRestoreAccess: () -> Unit,
 ) {
@@ -142,6 +148,7 @@ fun BookDetailScreen(
     var isDetectingGenres by remember { mutableStateOf(false) }
     var showEnrichDialog by remember { mutableStateOf(false) }
     var showChatDialog by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
     var isDescriptionExpanded by remember { mutableStateOf(false) }
     val modelDownloadState by viewModel.modelDownloadState.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
@@ -222,6 +229,13 @@ fun BookDetailScreen(
                         Icon(
                             Icons.AutoMirrored.Filled.Label,
                             contentDescription = "Edit genres",
+                            tint = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = { showSettingsDialog = true }) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "Settings",
                             tint = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -673,8 +687,11 @@ fun BookDetailScreen(
             bookAuthor = book?.author,
             currentGenres = book?.genres.orEmpty(),
             currentDescription = book?.description.orEmpty(),
-            modelDownloadState = modelDownloadState,
-            onDownloadModel = viewModel::downloadOnnxModel,
+            isModelDownloaded = viewModel.isModelDownloaded(),
+            onOpenSettings = {
+                showEnrichDialog = false
+                showSettingsDialog = true
+            },
             onEnrich = { query -> viewModel.enrichBookMetadata(query) },
             onApply = { genres, description, coverUrl ->
                 viewModel.applyEnrichedMetadata(genres, description, coverUrl)
@@ -693,6 +710,20 @@ fun BookDetailScreen(
             onDismiss = { showChatDialog = false },
         )
     }
+
+    if (showSettingsDialog) {
+        SettingsDialog(
+            modelDownloadState = modelDownloadState,
+            isModelDownloaded = viewModel.isModelDownloaded(),
+            modelSizeBytes = viewModel.getModelSizeBytes(),
+            freeSpaceBytes = viewModel.getFreeSpaceBytes(),
+            themeMode = themeMode,
+            onThemeModeChange = onThemeModeChange,
+            onDownloadModel = viewModel::downloadOnnxModel,
+            onDeleteModel = { viewModel.deleteOnnxModel() },
+            onDismiss = { showSettingsDialog = false },
+        )
+    }
 }
 
 @Composable
@@ -701,8 +732,8 @@ private fun EnrichMetadataDialog(
     bookAuthor: String?,
     currentGenres: String,
     currentDescription: String,
-    modelDownloadState: ModelDownloadState,
-    onDownloadModel: () -> Unit,
+    isModelDownloaded: Boolean,
+    onOpenSettings: () -> Unit,
     onEnrich: suspend (String) -> EnrichedBookMetadata?,
     onApply: (genres: String?, description: String?, coverUrl: String?) -> Unit,
     onDismiss: () -> Unit,
@@ -764,115 +795,62 @@ private fun EnrichMetadataDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item {
-                    // ONNX Model Status Card
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant,
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
-                            when (modelDownloadState) {
-                                is ModelDownloadState.Ready -> {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    ) {
-                                        Icon(
-                                            Icons.Default.AutoAwesome,
-                                            contentDescription = null,
-                                            tint = ColorOrangeLight,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                        Text(
-                                            "Local ONNX Model: SmolLM2-360M Ready",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
-                                        )
-                                    }
-                                }
-                                is ModelDownloadState.Downloading -> {
-                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text(
-                                            "Downloading SmolLM2-360M ONNX (${(modelDownloadState.progress * 100).toInt()}%)...",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = if (isDark) ColorBlueVioletLight else MaterialTheme.colorScheme.primary,
-                                        )
-                                        LinearProgressIndicator(
-                                            progress = { modelDownloadState.progress },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            color = ColorOrange,
-                                        )
-                                        Text(
-                                            "${modelDownloadState.bytesDownloaded / (1024 * 1024)} MB / ${modelDownloadState.totalBytes / (1024 * 1024)} MB",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
-                                        )
-                                    }
-                                }
-                                is ModelDownloadState.Error -> {
-                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            Text(
-                                                "Download failed",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.error,
-                                            )
-                                            TextButton(onClick = onDownloadModel) {
-                                                Icon(
-                                                    Icons.Default.Download,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(16.dp),
-                                                )
-                                                Spacer(Modifier.width(4.dp))
-                                                Text("Retry")
-                                            }
-                                        }
-                                        Text(
-                                            modelDownloadState.message,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
-                                            maxLines = 2,
-                                        )
-                                    }
-                                }
-                                else -> {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                "Local ONNX Model (~110 MB)",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
-                                            )
-                                            Text(
-                                                "Optional on-device neural processing",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
-                                            )
-                                        }
-                                        TextButton(onClick = onDownloadModel) {
-                                            Icon(
-                                                Icons.Default.Download,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(16.dp),
-                                            )
-                                            Spacer(Modifier.width(4.dp))
-                                            Text("Download")
-                                        }
-                                    }
-                                }
+                    if (isModelDownloaded) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(vertical = 2.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = ColorOrangeLight,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Text(
+                                "On-Device AI Active (SmolLM2-360M)",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Icon(
+                                    Icons.Default.Language,
+                                    contentDescription = null,
+                                    tint = if (isDark) ColorBlueVioletLight else MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Text(
+                                    "Web search active (SmolLM2-360M in Settings)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            TextButton(
+                                onClick = onOpenSettings,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            ) {
+                                Text(
+                                    "Settings",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                                )
                             }
                         }
                     }
