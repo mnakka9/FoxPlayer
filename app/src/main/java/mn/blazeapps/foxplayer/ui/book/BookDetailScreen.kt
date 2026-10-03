@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.GraphicEq
@@ -132,6 +133,8 @@ fun BookDetailScreen(
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
     val player by viewModel.player.collectAsStateWithLifecycle()
     val pane by viewModel.pane.collectAsStateWithLifecycle()
+    val chatMessages by viewModel.chatMessages.collectAsStateWithLifecycle()
+    val isChatGenerating by viewModel.isChatGenerating.collectAsStateWithLifecycle()
     var showBookmarkDialog by remember { mutableStateOf(false) }
     var bookmarkNote by remember { mutableStateOf("") }
     var showEditGenresDialog by remember { mutableStateOf(false) }
@@ -195,6 +198,13 @@ fun BookDetailScreen(
                             Icons.Default.AutoAwesome,
                             contentDescription = "Enrich with AI",
                             tint = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    IconButton(onClick = { viewModel.setPane(DetailPane.AIChat) }) {
+                        Icon(
+                            Icons.Default.Forum,
+                            contentDescription = "AI Companion Chat",
+                            tint = if (pane == DetailPane.AIChat) ColorOrange else if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     IconButton(onClick = { viewModel.rescanChapters() }) {
@@ -404,35 +414,82 @@ fun BookDetailScreen(
                     ),
                     shape = RoundedCornerShape(20.dp),
                 )
-                Spacer(Modifier.weight(1f))
-                GlassIconButton(
-                    onClick = { showBookmarkDialog = true },
-                    size = 40.dp,
-                    contentColor = ColorOrangeLight,
-                ) {
-                    Icon(
-                        Icons.Default.BookmarkAdd,
-                        contentDescription = "Add bookmark",
-                        modifier = Modifier.size(20.dp),
-                    )
+                FilterChip(
+                    selected = pane == DetailPane.AIChat,
+                    onClick = { viewModel.setPane(DetailPane.AIChat) },
+                    label = {
+                        Text(
+                            "AI Chat",
+                            fontWeight = if (pane == DetailPane.AIChat) FontWeight.Bold else FontWeight.Medium,
+                            color = if (pane == DetailPane.AIChat) Color.White else if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurface,
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = if (pane == DetailPane.AIChat) Color.White else ColorOrangeLight,
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant,
+                        selectedContainerColor = ColorOrange,
+                        labelColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurface,
+                        selectedLabelColor = Color.White,
+                        iconColor = ColorOrangeLight,
+                        selectedLeadingIconColor = Color.White,
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = pane == DetailPane.AIChat,
+                        borderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
+                        selectedBorderColor = ColorOrange,
+                    ),
+                    shape = RoundedCornerShape(20.dp),
+                )
+                if (pane == DetailPane.Bookmarks) {
+                    Spacer(Modifier.weight(1f))
+                    GlassIconButton(
+                        onClick = { showBookmarkDialog = true },
+                        size = 40.dp,
+                        contentColor = ColorOrangeLight,
+                    ) {
+                        Icon(
+                            Icons.Default.BookmarkAdd,
+                            contentDescription = "Add bookmark",
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))
-            if (pane == DetailPane.Chapters) {
-                ChapterList(
-                    chapters = chapters,
-                    currentChapterId = activeChapterId,
-                    onSelect = viewModel::jumpToChapter,
-                    listState = chapterListState,
-                    modifier = Modifier.weight(1f),
-                )
-            } else {
-                BookmarkList(
-                    bookmarks = bookmarks,
-                    onSelect = { viewModel.jumpToBookmark(it.bookmark) },
-                    onDelete = { viewModel.deleteBookmark(it.bookmark) },
-                    modifier = Modifier.weight(1f),
-                )
+            when (pane) {
+                DetailPane.Chapters -> {
+                    ChapterList(
+                        chapters = chapters,
+                        currentChapterId = activeChapterId,
+                        onSelect = viewModel::jumpToChapter,
+                        listState = chapterListState,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                DetailPane.Bookmarks -> {
+                    BookmarkList(
+                        bookmarks = bookmarks,
+                        onSelect = { viewModel.jumpToBookmark(it.bookmark) },
+                        onDelete = { viewModel.deleteBookmark(it.bookmark) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                DetailPane.AIChat -> {
+                    BookAiChatPane(
+                        messages = chatMessages,
+                        isGenerating = isChatGenerating,
+                        onSendMessage = viewModel::sendChatMessage,
+                        onClearChat = viewModel::clearChat,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }

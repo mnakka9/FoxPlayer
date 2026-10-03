@@ -17,9 +17,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import mn.blazeapps.foxplayer.data.ai.AiChatMessage
+import mn.blazeapps.foxplayer.data.ai.ChatSender
+import mn.blazeapps.foxplayer.data.ai.ChatSource
 import kotlinx.coroutines.launch
 
-enum class DetailPane { Chapters, Bookmarks }
+enum class DetailPane { Chapters, Bookmarks, AIChat }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class BookViewModel(application: Application) : AndroidViewModel(application) {
@@ -44,14 +47,74 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
     val player: StateFlow<PlayerUiState> = playback.state
 
+    val chatMessages = MutableStateFlow<List<AiChatMessage>>(emptyList())
+    val isChatGenerating = MutableStateFlow(false)
+
     fun open(id: Long) {
         if (bookId.value != id) {
             pane.value = DetailPane.Chapters
+            initChatForBook()
+        } else if (chatMessages.value.isEmpty()) {
+            initChatForBook()
         }
         bookId.value = id
         viewModelScope.launch {
             ensureThisBookLoaded(autoPlay = false)
         }
+    }
+
+    fun initChatForBook() {
+        val currentBook = book.value
+        val title = currentBook?.title ?: "this audiobook"
+        chatMessages.value = listOf(
+            AiChatMessage(
+                sender = ChatSender.Assistant,
+                text = "Hello! I am your AI Audiobook Companion for **$title**.\n\n" +
+                    "Here are a few things you can ask me:\n" +
+                    "• 📝 **\"Summarize my notes\"** — review and organize your bookmark notes\n" +
+                    "• 📖 **\"Define [word]\"** — explore definitions & literary expressions\n" +
+                    "• 🌐 **\"Historical context of [topic]\"** — search encyclopedia lore online\n" +
+                    "• 🔍 **\"What is this book about?\"** — explore plot, themes & characters\n\n" +
+                    "How can I assist your listening today?",
+                sources = listOf(ChatSource("AI Assistant", "Companion")),
+            )
+        )
+    }
+
+    fun sendChatMessage(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank() || isChatGenerating.value) return
+        val id = bookId.value ?: return
+
+        val userMsg = AiChatMessage(
+            sender = ChatSender.User,
+            text = trimmed,
+        )
+        chatMessages.value = chatMessages.value + userMsg
+
+        viewModelScope.launch {
+            isChatGenerating.value = true
+            try {
+                val response = repository.processAiChat(
+                    bookId = id,
+                    query = trimmed,
+                    bookmarksList = bookmarks.value,
+                )
+                chatMessages.value = chatMessages.value + response
+            } catch (e: Exception) {
+                chatMessages.value = chatMessages.value + AiChatMessage(
+                    sender = ChatSender.Assistant,
+                    text = "I encountered an error processing your inquiry: ${e.message}",
+                    sources = listOf(ChatSource("Error", "System")),
+                )
+            } finally {
+                isChatGenerating.value = false
+            }
+        }
+    }
+
+    fun clearChat() {
+        initChatForBook()
     }
 
     fun setPane(value: DetailPane) {

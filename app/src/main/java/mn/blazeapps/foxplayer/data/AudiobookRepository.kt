@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
+import mn.blazeapps.foxplayer.data.ai.AiChatEngine
+import mn.blazeapps.foxplayer.data.ai.AiChatMessage
 import mn.blazeapps.foxplayer.data.onnx.EnrichedBookMetadata
 import mn.blazeapps.foxplayer.data.onnx.OnnxBookMetadataEngine
 import mn.blazeapps.foxplayer.data.onnx.OnnxModelManager
@@ -26,6 +28,7 @@ class AudiobookRepository(
     val onnxModelManager: OnnxModelManager = OnnxModelManager(context),
     val onnxEngine: OnnxBookMetadataEngine = OnnxBookMetadataEngine(onnxModelManager),
     val webSearchResolver: WebBookSearchResolver = WebBookSearchResolver(),
+    val aiChatEngine: AiChatEngine = AiChatEngine(onnxModelManager, onnxEngine),
 ) {
     private val books = db.bookDao()
     private val chapters = db.chapterDao()
@@ -291,6 +294,16 @@ class AudiobookRepository(
             coverPath = newCoverPath,
         )
         true
+    }
+
+    suspend fun processAiChat(
+        bookId: Long,
+        query: String,
+        bookmarksList: List<BookmarkWithChapter>,
+    ): AiChatMessage = withContext(Dispatchers.IO) {
+        val book = books.getBook(bookId)
+        val chaps = chapters.getChapters(bookId)
+        aiChatEngine.processQuery(query, book, chaps, bookmarksList)
     }
 
     private fun persistReadPermission(treeUri: Uri) {
