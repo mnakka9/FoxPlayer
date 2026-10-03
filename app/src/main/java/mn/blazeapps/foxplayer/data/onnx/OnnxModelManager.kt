@@ -22,7 +22,7 @@ class OnnxModelManager(private val context: Context) {
 
     companion object {
         const val DEFAULT_MODEL_URL =
-            "https://huggingface.co/onnx-community/SmolLM-135M-Instruct/resolve/main/onnx/model_q4f16.onnx"
+            "https://huggingface.co/onnx-community/SmolLM-135M-Instruct-ONNX/resolve/main/onnx/model_q4f16.onnx"
         private const val MODEL_SUBDIR = "models/smollm_135m"
         private const val MODEL_FILENAME = "model.onnx"
     }
@@ -33,7 +33,9 @@ class OnnxModelManager(private val context: Context) {
     val downloadState: StateFlow<ModelDownloadState> = _downloadState.asStateFlow()
 
     private fun modelDir(): File {
-        val dir = File(context.filesDir, MODEL_SUBDIR)
+        // Prefer app-specific external storage (no permissions needed) with internal fallback
+        val base = context.getExternalFilesDir(null) ?: context.filesDir
+        val dir = File(base, MODEL_SUBDIR)
         if (!dir.exists()) dir.mkdirs()
         return dir
     }
@@ -44,7 +46,7 @@ class OnnxModelManager(private val context: Context) {
 
     fun isModelDownloaded(): Boolean {
         val file = getModelFile()
-        // INT4 quantized SmolLM-135M is ~70-85 MB
+        // Quantized SmolLM-135M is ~70-120 MB
         return file.exists() && file.length() > 10 * 1024 * 1024
     }
 
@@ -64,29 +66,62 @@ class OnnxModelManager(private val context: Context) {
 
     suspend fun downloadModel(urlStr: String = DEFAULT_MODEL_URL): Boolean = withContext(Dispatchers.IO) {
         val targetFile = getModelFile()
-        val tempFile = File(modelDir(), "$MODEL_FILENAME.tmp")
+        val targetDir = modelDir()
+        val tempFile = File(targetDir, "$MODEL_FILENAME.tmp")
 
         try {
             _downloadState.value = ModelDownloadState.Downloading(0f, 0L, 0L)
 
-            val url = URL(urlStr)
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 15000
-                readTimeout = 30000
-                instanceFollowRedirects = true
-                setRequestProperty("User-Agent", "FoxPlayer/1.0 (Android Audiobook Player; ONNX Model Downloader)")
-            }
-
-            if (connection.responseCode !in 200..299) {
-                _downloadState.value = ModelDownloadState.Error("HTTP Error: ${connection.responseCode} ${connection.responseMessage}")
-                connection.disconnect()
+            // Check storage space
+            val freeBytes = targetDir.usableSpace
+            if (freeBytes > 0 && freeBytes < 150L * 1024 * 1024) {
+                _downloadState.value = ModelDownloadState.Error("Insufficient storage: ${freeBytes / (1024 * 1024)}MB free, ~150MB needed")
                 return@withContext false
             }
 
-            val totalBytes = connection.contentLengthLong.takeIf { it > 0 } ?: (78L * 1024 * 1024)
+            // Follow HTTP redirects across hosts (Hugging Face redirects to AWS/Cloudfront CDN)
+            var currentUrl = urlStr
+            var redirectCount = 0
+            val maxRedirects = 10
+            var connection: HttpURLConnection? = null
+
+            while (redirectCount < maxRedirects) {
+                val url = URL(currentUrl)
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 20000
+                    readTimeout = 60000
+                    instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; FoxPlayer/1.1.0)")
+                    setRequestProperty("Accept", "*/*")
+                }
+                val code = conn.responseCode
+                if (code in 300..399) {
+                    val location = conn.getHeaderField("Location")
+                    conn.disconnect()
+                    if (location.isNullOrBlank()) {
+                        throw java.io.IOException("HTTP $code redirect without Location header")
+                    }
+                    currentUrl = if (location.startsWith("http://") || location.startsWith("https://")) {
+                        location
+                    } else {
+                        URL(url, location).toString()
+                    }
+                    redirectCount++
+                } else if (code in 200..299) {
+                    connection = conn
+                    break
+                } else {
+                    conn.disconnect()
+                    throw java.io.IOException("HTTP Error $code: ${conn.responseMessage}")
+                }
+            }
+
+            val finalConnection = connection ?: throw java.io.IOException("Failed to connect after $redirectCount redirects")
+
+            val totalBytes = finalConnection.contentLengthLong.takeIf { it > 0 } ?: (117L * 1024 * 1024)
             var bytesRead = 0L
 
-            connection.inputStream.use { input ->
+            finalConnection.inputStream.use { input ->
                 FileOutputStream(tempFile).use { output ->
                     val buffer = ByteArray(64 * 1024)
                     var read: Int
@@ -103,23 +138,32 @@ class OnnxModelManager(private val context: Context) {
                             lastUpdate = now
                         }
                     }
+                    output.flush()
                 }
             }
-            connection.disconnect()
+            finalConnection.disconnect()
 
             if (tempFile.length() < 1024 * 1024) {
                 tempFile.delete()
-                _downloadState.value = ModelDownloadState.Error("Downloaded file too small, check connection or URL")
+                _downloadState.value = ModelDownloadState.Error("Downloaded file too small, connection may have been interrupted")
                 return@withContext false
             }
 
+            // Move temp file to target file safely
             if (targetFile.exists()) targetFile.delete()
-            val renamed = tempFile.renameTo(targetFile)
-            if (renamed) {
+            val moved = try {
+                tempFile.copyTo(targetFile, overwrite = true)
+                tempFile.delete()
+                true
+            } catch (_: Exception) {
+                tempFile.renameTo(targetFile)
+            }
+
+            if (moved && targetFile.exists() && targetFile.length() > 0) {
                 _downloadState.value = ModelDownloadState.Ready
                 true
             } else {
-                _downloadState.value = ModelDownloadState.Error("Failed to rename temporary model file")
+                _downloadState.value = ModelDownloadState.Error("Failed to save model to storage")
                 false
             }
         } catch (e: Exception) {

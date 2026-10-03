@@ -785,6 +785,37 @@ private fun EnrichMetadataDialog(
                                         )
                                     }
                                 }
+                                is ModelDownloadState.Error -> {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(
+                                                "Download failed",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.error,
+                                            )
+                                            TextButton(onClick = onDownloadModel) {
+                                                Icon(
+                                                    Icons.Default.Download,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                                Spacer(Modifier.width(4.dp))
+                                                Text("Retry")
+                                            }
+                                        }
+                                        Text(
+                                            modelDownloadState.message,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
+                                            maxLines = 2,
+                                        )
+                                    }
+                                }
                                 else -> {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -793,7 +824,7 @@ private fun EnrichMetadataDialog(
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
-                                                "Local ONNX Model (~78 MB)",
+                                                "Local ONNX Model (~110 MB)",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
