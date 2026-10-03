@@ -688,6 +688,7 @@ private fun EnrichMetadataDialog(
     var editableGenres by remember { mutableStateOf(currentGenres) }
     var editableDesc by remember { mutableStateOf(currentDescription) }
     var updateCover by remember { mutableStateOf(true) }
+    var showLogs by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
     AlertDialog(
@@ -978,6 +979,64 @@ private fun EnrichMetadataDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
                             )
+
+                            // Expandable Activity & Model Log
+                            if (result.logs.isNotEmpty()) {
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isDark) Color(0xFF0F1535) else MaterialTheme.colorScheme.surfaceVariant,
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showLogs = !showLogs },
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(
+                                                text = "Activity & Model Logs (${result.logs.size})",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isDark) ColorBlueVioletLight else MaterialTheme.colorScheme.primary,
+                                            )
+                                            Text(
+                                                text = if (showLogs) "Hide" else "Show",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                        if (showLogs) {
+                                            Spacer(Modifier.height(8.dp))
+                                            Column(
+                                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .background(
+                                                        if (isDark) Color(0x66000000) else Color(0x11000000),
+                                                        RoundedCornerShape(8.dp),
+                                                    )
+                                                    .padding(8.dp),
+                                            ) {
+                                                result.logs.forEach { logLine ->
+                                                    Text(
+                                                        text = logLine,
+                                                        style = MaterialTheme.typography.bodySmall.copy(
+                                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                            fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                                        ),
+                                                        color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurface,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
