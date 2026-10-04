@@ -36,6 +36,7 @@ fun SettingsDialog(
     onThemeModeChange: (ThemeMode) -> Unit,
     onDownloadModel: () -> Unit,
     onDeleteModel: () -> Unit,
+    onRescanChapters: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     val isDark = MaterialTheme.colorScheme.background == BgDeep
@@ -536,6 +537,69 @@ fun SettingsDialog(
                                     desc = "Live web indexing across publisher reviews & series chronology",
                                     isDark = isDark,
                                 )
+                            }
+                        }
+                    }
+
+                    // Section: Audiobook Management
+                    if (onRescanChapters != null) {
+                        item {
+                            SectionHeader(
+                                title = "Audiobook Management",
+                                icon = Icons.Default.FolderOpen,
+                                iconTint = ColorOrangeLight,
+                                isDark = isDark,
+                            )
+                            Spacer(Modifier.height(8.dp))
+
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant,
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant,
+                                ),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            onRescanChapters()
+                                            onDismiss()
+                                        }
+                                        .padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Refresh,
+                                            contentDescription = null,
+                                            tint = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(22.dp),
+                                        )
+                                        Column {
+                                            Text(
+                                                "Re-scan Audiobook Chapters",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                                            )
+                                            Text(
+                                                "Re-index audio files, duration, and chapter tags from device storage",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

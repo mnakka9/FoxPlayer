@@ -177,4 +177,34 @@ class AiChatEngineTest {
         assertTrue(plain.contains("Lake Toba"))
         assertTrue(plain.contains("Massive caldera lake."))
     }
+
+    @Test
+    fun testParseSeriesDetailsWithNextBook() {
+        val sampleText = "The Way of Kings is an epic fantasy novel by Brandon Sanderson and the first book in The Stormlight Archive series. It was followed by Words of Radiance in 2014."
+        val parsed = aiChatEngine.parseSeriesDetails("The Way of Kings", sampleText)
+        assertEquals("The Stormlight Archive", parsed.seriesName)
+        assertEquals("Book 1", parsed.seriesOrder)
+        assertEquals("Words of Radiance", parsed.nextBook)
+        assertFalse(parsed.isStandalone)
+    }
+
+    @Test
+    fun testParseSeriesDetailsStandalone() {
+        val sampleText = "Elantris is a standalone novel written by Brandon Sanderson, set in the Cosmere universe."
+        val parsed = aiChatEngine.parseSeriesDetails("Elantris", sampleText)
+        assertTrue(parsed.isStandalone)
+        assertNull(parsed.nextBook)
+    }
+
+    @Test
+    fun testParseAuthorBestSellers() {
+        val sampleText = "Brandon Sanderson is best known for \"Mistborn: The Final Empire\", \"Words of Radiance\", and \"The Way of Kings\"."
+        val bestsellers = aiChatEngine.parseAuthorBestSellers("The Way of Kings", "Brandon Sanderson", sampleText)
+        assertTrue(bestsellers.contains("Mistborn: The Final Empire"))
+        assertTrue(bestsellers.contains("Words of Radiance"))
+        // Current book title should be excluded
+        assertFalse(bestsellers.contains("The Way of Kings"))
+        // Author name should be excluded
+        assertFalse(bestsellers.contains("Brandon Sanderson"))
+    }
 }

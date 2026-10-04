@@ -14,6 +14,7 @@ import kotlinx.coroutines.withContext
 
 import mn.blazeapps.foxplayer.data.ai.AiChatEngine
 import mn.blazeapps.foxplayer.data.ai.AiChatMessage
+import mn.blazeapps.foxplayer.data.ai.BookSeriesAndAuthorInfo
 import mn.blazeapps.foxplayer.data.onnx.EnrichedBookMetadata
 import mn.blazeapps.foxplayer.data.onnx.OnnxBookMetadataEngine
 import mn.blazeapps.foxplayer.data.onnx.OnnxModelManager
@@ -304,6 +305,11 @@ class AudiobookRepository(
         val book = books.getBook(bookId)
         val chaps = chapters.getChapters(bookId)
         aiChatEngine.processQuery(query, book, chaps, bookmarksList)
+    }
+
+    suspend fun fetchBookSeriesInfo(bookId: Long): BookSeriesAndAuthorInfo? = withContext(Dispatchers.IO) {
+        val book = books.getBook(bookId) ?: return@withContext null
+        aiChatEngine.fetchSeriesAndAuthorInfo(book.title, book.author)
     }
 
     private fun persistReadPermission(treeUri: Uri) {

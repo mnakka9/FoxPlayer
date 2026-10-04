@@ -34,12 +34,48 @@ data class BraveSearchData(
     val snippets: List<String> = emptyList(),
 )
 
+data class BookSeriesAndAuthorInfo(
+    val bookTitle: String,
+    val author: String?,
+    val seriesName: String? = null,
+    val seriesOrder: String? = null,
+    val nextBook: String? = null,
+    val previousBook: String? = null,
+    val isStandalone: Boolean = false,
+    val authorBestSellers: List<String> = emptyList(),
+    val seriesOverview: String? = null,
+    val sources: List<ChatSource> = emptyList(),
+    val usedOnnxModel: Boolean = false,
+)
+
+data class ParsedSeries(
+    val seriesName: String? = null,
+    val seriesOrder: String? = null,
+    val nextBook: String? = null,
+    val previousBook: String? = null,
+    val isStandalone: Boolean = false,
+    val overview: String? = null,
+)
+
 class AiChatEngine(
     private val modelManager: OnnxModelManager? = null,
     private val onnxEngine: OnnxBookMetadataEngine? = null,
 ) {
     companion object {
         private const val TAG = "FoxPlayer-AiChat"
+
+        val ORDINAL_MAP = mapOf(
+            "first" to "Book 1", "1st" to "Book 1",
+            "second" to "Book 2", "2nd" to "Book 2",
+            "third" to "Book 3", "3rd" to "Book 3",
+            "fourth" to "Book 4", "4th" to "Book 4",
+            "fifth" to "Book 5", "5th" to "Book 5",
+            "sixth" to "Book 6", "6th" to "Book 6",
+            "seventh" to "Book 7", "7th" to "Book 7",
+            "eighth" to "Book 8", "8th" to "Book 8",
+            "ninth" to "Book 9", "9th" to "Book 9",
+            "tenth" to "Book 10", "10th" to "Book 10",
+        )
 
         private fun logE(message: String, throwable: Throwable? = null) {
             try {
@@ -626,5 +662,220 @@ class AiChatEngine(
             text = sb.toString().trim(),
             sources = sources,
         )
+    }
+
+    suspend fun fetchSeriesAndAuthorInfo(
+        title: String,
+        author: String?,
+    ): BookSeriesAndAuthorInfo = withContext(Dispatchers.IO) {
+        val cleanTitle = title.trim()
+        val cleanAuthor = author?.trim()?.takeIf { it.isNotBlank() }
+
+        // 1. Search for book series context across Wikipedia, DuckDuckGo, and Brave Search
+        val seriesSearchQuery = if (cleanAuthor != null) "$cleanTitle $cleanAuthor book series next book" else "$cleanTitle book series next book"
+        val wikiSeriesDeferred = async { queryWikipedia(cleanTitle) }
+        val ddgSeriesDeferred = async { queryDuckDuckGo("$cleanTitle series next book") }
+        val braveSeriesDeferred = async { queryBrave(seriesSearchQuery) }
+
+        // 2. Search for author bestsellers if author is present
+        val authorBestSellersDeferred = if (cleanAuthor != null) {
+            async {
+                val authorWiki = queryWikipedia(cleanAuthor)
+                val authorBrave = queryBrave("$cleanAuthor best books bestsellers")
+                Pair(authorWiki, authorBrave)
+            }
+        } else null
+
+        val wikiData = wikiSeriesDeferred.await()
+        val ddgData = ddgSeriesDeferred.await()
+        val braveData = braveSeriesDeferred.await()
+        val authorPair = authorBestSellersDeferred?.await()
+
+        val allSeriesText = buildString {
+            if (!wikiData?.extract.isNullOrBlank()) append(wikiData!!.extract).append(" ")
+            wikiData?.snippets?.forEach { append(it).append(" ") }
+            if (!ddgData?.abstractText.isNullOrBlank()) append(ddgData!!.abstractText).append(" ")
+            braveData?.snippets?.forEach { append(it).append(" ") }
+        }
+
+        // Run local SmolLM forward pass if available
+        var usedOnnx = false
+        if (onnxEngine != null && modelManager?.isModelDownloaded() == true) {
+            val prompt = buildString {
+                append("<|im_start|>system\n")
+                append("Identify the book series name, next book in series, and the author's best sellers from the context.\n")
+                append("<|im_end|>\n")
+                append("<|im_start|>user\n")
+                append("Book: ").append(cleanTitle).append("\n")
+                if (cleanAuthor != null) append("Author: ").append(cleanAuthor).append("\n")
+                if (allSeriesText.isNotBlank()) append("Context: ").append(allSeriesText.take(500)).append("\n")
+                append("<|im_end|>\n")
+                append("<|im_start|>assistant\n")
+            }
+            usedOnnx = onnxEngine.runChatInference(prompt)
+        }
+
+        // Parse series details from aggregated text
+        val parsedSeries = parseSeriesDetails(cleanTitle, allSeriesText)
+
+        // Parse author bestsellers
+        val allAuthorText = buildString {
+            val authorWiki = authorPair?.first
+            val authorBrave = authorPair?.second
+            if (!authorWiki?.extract.isNullOrBlank()) append(authorWiki!!.extract).append(" ")
+            authorWiki?.snippets?.forEach { append(it).append(" ") }
+            authorBrave?.snippets?.forEach { append(it).append(" ") }
+        }
+        val bestsellers = parseAuthorBestSellers(cleanTitle, cleanAuthor, allAuthorText)
+
+        val sources = mutableListOf<ChatSource>()
+        if (wikiData != null) sources.add(ChatSource(wikiData.title, "Wikipedia"))
+        if (ddgData != null) sources.add(ChatSource("DuckDuckGo", "Web Search"))
+        if (braveData != null) sources.add(ChatSource("Brave Search", "Web Search"))
+        if (authorPair?.first != null) sources.add(ChatSource(authorPair.first!!.title, "Author Wiki"))
+        if (usedOnnx) sources.add(ChatSource("SmolLM2-360M", "Local LLM"))
+
+        BookSeriesAndAuthorInfo(
+            bookTitle = cleanTitle,
+            author = cleanAuthor,
+            seriesName = parsedSeries.seriesName,
+            seriesOrder = parsedSeries.seriesOrder,
+            nextBook = parsedSeries.nextBook,
+            previousBook = parsedSeries.previousBook,
+            isStandalone = parsedSeries.isStandalone,
+            authorBestSellers = bestsellers,
+            seriesOverview = parsedSeries.overview,
+            sources = sources.distinctBy { it.title + it.type },
+            usedOnnxModel = usedOnnx,
+        )
+    }
+
+    fun parseSeriesDetails(title: String, text: String): ParsedSeries {
+        if (text.isBlank()) return ParsedSeries()
+
+        var seriesName: String? = null
+        var seriesOrder: String? = null
+        var nextBook: String? = null
+        var previousBook: String? = null
+        var isStandalone = false
+
+        val lower = text.lowercase()
+        if (lower.contains("standalone novel") || lower.contains("stand-alone novel") ||
+            lower.contains("standalone book") || lower.contains("stand-alone book")) {
+            isStandalone = true
+        }
+
+        // Pattern 1: "... first/second/... book in the [Series Name] series/trilogy/saga"
+        val seriesRegex1 = Regex("(?i)(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\\d+(?:st|nd|rd|th)?)\\s+(?:book|novel|installment|part|entry|volume)\\s+(?:in|of)\\s+([A-Z][A-Za-z0-9'\\s–-]+?)(?:\\s+(?:series|trilogy|saga|cycle|sequence|quartet|duology))")
+        val match1 = seriesRegex1.find(text)
+        if (match1 != null) {
+            val ord = match1.groupValues[1].lowercase()
+            seriesOrder = ORDINAL_MAP[ord] ?: "Book $ord"
+            seriesName = match1.groupValues[2].trim().trimEnd(',', '.')
+        }
+
+        // Pattern 2: "Book X of [Series Name]"
+        if (seriesName == null) {
+            val seriesRegex2 = Regex("(?i)book\\s+(\\d+)\\s+(?:of|in)\\s+([A-Z][A-Za-z0-9'\\s–-]+?)(?:\\s+(?:series|trilogy|saga)|\\.|,|\\()")
+            val match2 = seriesRegex2.find(text)
+            if (match2 != null) {
+                seriesOrder = "Book ${match2.groupValues[1]}"
+                seriesName = match2.groupValues[2].trim().trimEnd(',', '.')
+            }
+        }
+
+        // Pattern 3: "... part of the [Series Name] series"
+        if (seriesName == null) {
+            val seriesRegex3 = Regex("(?i)part\\s+of\\s+([A-Z][A-Za-z0-9'\\s–-]+?)\\s+(?:series|trilogy|saga|cycle)")
+            val match3 = seriesRegex3.find(text)
+            if (match3 != null) {
+                seriesName = match3.groupValues[1].trim().trimEnd(',', '.')
+            }
+        }
+
+        // Pattern for Next Book / Sequel: "Followed by [Next Book]" or "sequel ... is [Next Book]"
+        val nextRegex1 = Regex("(?i)(?:followed by|succeeded by|sequel(?: is| to this book is)?|next book(?: in the series)?(?: is)?|next installment(?: is)?)\\s+[:]?\\s*[\"']?([A-Z][A-Za-z0-9'\\s–-]+?)[\"']?(?:\\s*\\(\\d{4}\\)|\\s+(?:in\\s+\\d{4}|published|released|which|and|\\.|,))")
+        val nextMatch1 = nextRegex1.find(text)
+        if (nextMatch1 != null) {
+            val candidate = nextMatch1.groupValues[1].trim().trimEnd(',', '.')
+            if (isValidBookTitle(candidate, title)) {
+                nextBook = candidate
+            }
+        }
+
+        // Pattern for Previous Book / Prequel: "Preceded by [Prev Book]"
+        val prevRegex1 = Regex("(?i)(?:preceded by|prequel(?: is)?)\\s+[:]?\\s*[\"']?([A-Z][A-Za-z0-9'\\s–-]+?)[\"']?(?:\\s*\\(\\d{4}\\)|\\s+(?:in\\s+\\d{4}|published|released|which|and|\\.|,))")
+        val prevMatch1 = prevRegex1.find(text)
+        if (prevMatch1 != null) {
+            val candidate = prevMatch1.groupValues[1].trim().trimEnd(',', '.')
+            if (isValidBookTitle(candidate, title)) {
+                previousBook = candidate
+            }
+        }
+
+        // Extract a clean overview sentence if available
+        var overview: String? = null
+        if (seriesName != null) {
+            val sentences = text.split(Regex("(?<=[.!?])\\s+"))
+            overview = sentences.firstOrNull { it.contains(seriesName, ignoreCase = true) && it.length in 30..300 }?.trim()
+        }
+
+        return ParsedSeries(
+            seriesName = seriesName,
+            seriesOrder = seriesOrder,
+            nextBook = nextBook,
+            previousBook = previousBook,
+            isStandalone = isStandalone && seriesName == null,
+            overview = overview,
+        )
+    }
+
+    fun parseAuthorBestSellers(currentTitle: String, author: String?, text: String): List<String> {
+        if (text.isBlank()) return emptyList()
+
+        val results = mutableListOf<String>()
+
+        // 1. Quoted titles: "The Final Empire", "Words of Radiance"
+        val quotedRegex = Regex("[\"']([A-Z][A-Za-z0-9':,\\s–-]{3,50}?)[\"']")
+        for (m in quotedRegex.findAll(text)) {
+            val candidate = m.groupValues[1].trim().trimEnd(',', '.')
+            if (isValidBookTitle(candidate, currentTitle) && (author == null || !candidate.equals(author, ignoreCase = true))) {
+                if (results.none { it.equals(candidate, ignoreCase = true) }) {
+                    results.add(candidate)
+                }
+            }
+            if (results.size >= 5) break
+        }
+
+        // 2. Look for best-selling / notable works mentions if we don't have enough
+        if (results.size < 3) {
+            val bestSellerRegex = Regex("(?i)(?:best-selling|bestselling|notable|popular|acclaimed)\\s+(?:novels?|books?|works?)(?:\\s+include|\\s+are)?\\s+([A-Z][A-Za-z0-9',\\s–-]+?)(?:\\.|;|\n)")
+            val match = bestSellerRegex.find(text)
+            if (match != null) {
+                val listSnippet = match.groupValues[1]
+                val splitTitles = listSnippet.split(Regex(",\\s*(?:and\\s+)?|\\s+and\\s+"))
+                for (t in splitTitles) {
+                    val clean = t.trim().trim('"', '\'').trimEnd(',', '.')
+                    if (isValidBookTitle(clean, currentTitle) && (author == null || !clean.equals(author, ignoreCase = true))) {
+                        if (results.none { it.equals(clean, ignoreCase = true) }) {
+                            results.add(clean)
+                        }
+                    }
+                }
+            }
+        }
+
+        return results.take(5)
+    }
+
+    private fun isValidBookTitle(candidate: String, currentTitle: String): Boolean {
+        val trimmed = candidate.trim().trimEnd(',', '.', ':', ';')
+        if (trimmed.length < 3 || trimmed.length > 60) return false
+        if (trimmed.equals(currentTitle, ignoreCase = true)) return false
+        val invalidStarts = listOf("a ", "the next", "an ", "his ", "her ", "another ", "several ", "many ", "various ")
+        if (invalidStarts.any { trimmed.lowercase().startsWith(it) }) return false
+        val stopWords = setOf("the", "a", "an", "novel", "book", "sequel", "prequel", "series")
+        if (trimmed.lowercase() in stopWords) return false
+        return true
     }
 }

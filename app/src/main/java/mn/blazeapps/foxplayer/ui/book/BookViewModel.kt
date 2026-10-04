@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import mn.blazeapps.foxplayer.data.ai.AiChatMessage
+import mn.blazeapps.foxplayer.data.ai.BookSeriesAndAuthorInfo
 import mn.blazeapps.foxplayer.data.ai.ChatSender
 import mn.blazeapps.foxplayer.data.ai.ChatSource
 import kotlinx.coroutines.launch
@@ -50,9 +51,13 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     val chatMessages = MutableStateFlow<List<AiChatMessage>>(emptyList())
     val isChatGenerating = MutableStateFlow(false)
 
+    val bookSeriesInfo = MutableStateFlow<BookSeriesAndAuthorInfo?>(null)
+    val isFetchingBookInfo = MutableStateFlow(false)
+
     fun open(id: Long) {
         if (bookId.value != id) {
             pane.value = DetailPane.Chapters
+            bookSeriesInfo.value = null
             initChatForBook()
         } else if (chatMessages.value.isEmpty()) {
             initChatForBook()
@@ -60,6 +65,23 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         bookId.value = id
         viewModelScope.launch {
             ensureThisBookLoaded(autoPlay = false)
+        }
+    }
+
+    fun loadBookInfo(forceRefresh: Boolean = false) {
+        val id = bookId.value ?: return
+        if (!forceRefresh && bookSeriesInfo.value != null) return
+        if (isFetchingBookInfo.value) return
+
+        viewModelScope.launch {
+            isFetchingBookInfo.value = true
+            try {
+                val info = repository.fetchBookSeriesInfo(id)
+                bookSeriesInfo.value = info
+            } catch (_: Exception) {
+            } finally {
+                isFetchingBookInfo.value = false
+            }
         }
     }
 

@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Replay30
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.ui.draw.shadow
@@ -143,13 +144,12 @@ fun BookDetailScreen(
     val isChatGenerating by viewModel.isChatGenerating.collectAsStateWithLifecycle()
     var showBookmarkDialog by remember { mutableStateOf(false) }
     var bookmarkNote by remember { mutableStateOf("") }
-    var showEditGenresDialog by remember { mutableStateOf(false) }
-    var editGenresText by remember { mutableStateOf("") }
-    var isDetectingGenres by remember { mutableStateOf(false) }
     var showEnrichDialog by remember { mutableStateOf(false) }
     var showChatDialog by remember { mutableStateOf(false) }
+    var showInfoDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
-    var isDescriptionExpanded by remember { mutableStateOf(false) }
+    val bookSeriesInfo by viewModel.bookSeriesInfo.collectAsStateWithLifecycle()
+    val isFetchingBookInfo by viewModel.isFetchingBookInfo.collectAsStateWithLifecycle()
     val modelDownloadState by viewModel.modelDownloadState.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
 
@@ -215,21 +215,11 @@ fun BookDetailScreen(
                             tint = if (showChatDialog) ColorOrange else if (isDark) ColorBlueVioletLight else MaterialTheme.colorScheme.primary,
                         )
                     }
-                    IconButton(onClick = { viewModel.rescanChapters() }) {
+                    IconButton(onClick = { showInfoDialog = true }) {
                         Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = "Re-scan chapters",
-                            tint = if (isDark) ColorBlueVioletLight else MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    IconButton(onClick = {
-                        editGenresText = book?.genres.orEmpty()
-                        showEditGenresDialog = true
-                    }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Label,
-                            contentDescription = "Edit genres",
-                            tint = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            Icons.Default.Info,
+                            contentDescription = "Book Information & Series",
+                            tint = if (showInfoDialog) ColorOrange else if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
                         )
                     }
                     IconButton(onClick = { showSettingsDialog = true }) {
@@ -312,22 +302,6 @@ fun BookDetailScreen(
                                     color = MaterialTheme.colorScheme.secondary,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.clickable {
-                                        editGenresText = genres
-                                        showEditGenresDialog = true
-                                    },
-                                )
-                            }
-                            val description = book?.description
-                            if (!description.isNullOrBlank()) {
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    description,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = if (isDescriptionExpanded) 12 else 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.clickable { isDescriptionExpanded = !isDescriptionExpanded },
                                 )
                             }
                         }
@@ -561,124 +535,18 @@ fun BookDetailScreen(
         )
     }
 
-    if (showEditGenresDialog) {
-        AlertDialog(
-            onDismissRequest = { showEditGenresDialog = false },
-            containerColor = if (isDark) Color(0xF20D1230) else MaterialTheme.colorScheme.surface,
-            titleContentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
-            textContentColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
-            shape = RoundedCornerShape(24.dp),
-            modifier = Modifier.border(
-                BorderStroke(1.dp, if (isDark) GlassBorder else MaterialTheme.colorScheme.outline),
-                RoundedCornerShape(24.dp),
-            ),
-            title = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    SquircleIconBox(
-                        size = 38.dp,
-                        brush = Brush.linearGradient(listOf(ColorBlueViolet, ColorPurple)),
-                        shadowColor = Color(0x666366F1),
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Label,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                    Text(
-                        "Edit Genres",
-                        fontWeight = FontWeight.Bold,
-                        color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
-                    )
-                }
+    if (showInfoDialog) {
+        BookInfoDialog(
+            book = book,
+            seriesInfo = bookSeriesInfo,
+            isFetchingInfo = isFetchingBookInfo,
+            onRefreshInfo = { viewModel.loadBookInfo(forceRefresh = true) },
+            onAddBookmarkNote = { noteText ->
+                bookmarkNote = noteText
+                showInfoDialog = false
+                showBookmarkDialog = true
             },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "Enter comma-separated genres for this audiobook (e.g. Fantasy, Sci-Fi).",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    OutlinedTextField(
-                        value = editGenresText,
-                        onValueChange = { editGenresText = it },
-                        label = { Text("Genres") },
-                        placeholder = { Text("Sci-Fi, Fantasy") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
-                            unfocusedTextColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
-                            focusedContainerColor = if (isDark) InputBg else MaterialTheme.colorScheme.surface,
-                            unfocusedContainerColor = if (isDark) InputBg else MaterialTheme.colorScheme.surface,
-                            focusedBorderColor = ColorBlueVioletLight,
-                            unfocusedBorderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
-                            focusedLabelColor = ColorBlueVioletLight,
-                            unfocusedLabelColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            cursorColor = ColorOrange,
-                            focusedPlaceholderColor = if (isDark) TextMuted else MaterialTheme.colorScheme.onSurfaceVariant,
-                            unfocusedPlaceholderColor = if (isDark) TextMuted else MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        TextButton(
-                            onClick = {
-                                coroutineScope.launch {
-                                    isDetectingGenres = true
-                                    val detected = viewModel.autoDetectGenres()
-                                    if (!detected.isNullOrBlank()) {
-                                        editGenresText = detected
-                                    }
-                                    isDetectingGenres = false
-                                }
-                            },
-                            enabled = !isDetectingGenres,
-                        ) {
-                            if (isDetectingGenres) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = ColorOrange,
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                            }
-                            Text(
-                                "Auto-detect from web",
-                                color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.updateGenres(editGenresText)
-                        showEditGenresDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = ColorBlueViolet,
-                        contentColor = Color.White,
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Text("Save", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEditGenresDialog = false }) {
-                    Text("Cancel", color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            },
+            onDismiss = { showInfoDialog = false },
         )
     }
 
@@ -727,6 +595,7 @@ fun BookDetailScreen(
             onThemeModeChange = onThemeModeChange,
             onDownloadModel = viewModel::downloadOnnxModel,
             onDeleteModel = { viewModel.deleteOnnxModel() },
+            onRescanChapters = viewModel::rescanChapters,
             onDismiss = { showSettingsDialog = false },
         )
     }

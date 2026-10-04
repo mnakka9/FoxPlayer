@@ -711,7 +711,7 @@ fun MarkdownContentView(
 }
 
 @Composable
-private fun SourceBadge(
+fun SourceBadge(
     src: ChatSource,
     isDark: Boolean,
 ) {
