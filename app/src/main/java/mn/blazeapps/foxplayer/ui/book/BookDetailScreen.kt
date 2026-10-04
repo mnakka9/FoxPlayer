@@ -640,7 +640,34 @@ fun BookDetailScreen(
             onFoundryModelChange = localChatPreferences::setFoundryModel,
             onTestFoundryConnection = {
                 withContext(Dispatchers.IO) {
-                    LocalLlmClient(endpointUrl = foundryEndpoint, modelName = foundryModel).testConnection()
+                    val ipcStatus = mn.blazeapps.foxplayer.data.ai.FoundryIpcManager.checkStatus(context)
+                    if (ipcStatus.isConnected) {
+                        LocalLlmClient.ConnectionStatus(
+                            isSuccess = true,
+                            latencyMs = ipcStatus.latencyMs,
+                            models = ipcStatus.models.ifEmpty { listOf(foundryModel) },
+                            message = "IPC Connected (${ipcStatus.latencyMs}ms)",
+                        )
+                    } else if (ipcStatus.isAppInstalled) {
+                        LocalLlmClient.ConnectionStatus(
+                            isSuccess = false,
+                            latencyMs = ipcStatus.latencyMs,
+                            models = ipcStatus.models,
+                            message = ipcStatus.message,
+                        )
+                    } else {
+                        val http = LocalLlmClient(endpointUrl = foundryEndpoint, modelName = foundryModel).testConnection()
+                        if (http.isSuccess) {
+                            http
+                        } else {
+                            LocalLlmClient.ConnectionStatus(
+                                isSuccess = false,
+                                latencyMs = 0,
+                                models = emptyList(),
+                                message = "Foundry app not installed",
+                            )
+                        }
+                    }
                 }
             },
             isGeminiChatEnabled = isGeminiChatEnabled,

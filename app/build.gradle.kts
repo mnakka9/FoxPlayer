@@ -130,6 +130,9 @@ dependencies {
     // Secure Preferences & Crypto
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
+    // Microsoft Foundry Local IPC SDK
+    implementation(files("libs/foundry-local-ipc-sdk-0.1.6.aar"))
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
 }

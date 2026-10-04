@@ -35,6 +35,7 @@ class AudiobookRepository(
         modelManager = onnxModelManager,
         onnxEngine = onnxEngine,
         localChatPreferences = localChatPreferences,
+        context = context,
     ),
 ) {
     private val books = db.bookDao()

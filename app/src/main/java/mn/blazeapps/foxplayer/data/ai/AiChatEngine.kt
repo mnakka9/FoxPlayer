@@ -70,6 +70,7 @@ class AiChatEngine(
     private val onnxEngine: OnnxBookMetadataEngine? = null,
     val localLlmClient: LocalLlmClient = LocalLlmClient(),
     val localChatPreferences: LocalChatPreferences? = null,
+    val context: android.content.Context? = null,
 ) {
     companion object {
         private const val TAG = "FoxPlayer-AiChat"
@@ -318,44 +319,76 @@ class AiChatEngine(
         localLlmClient.modelName = foundryModel
 
         if (engineMode == LocalChatEngineMode.FOUNDRY_LOCAL) {
-            // 1. If Microsoft Foundry Local runtime is active, execute the agentic tool-calling loop
+            // First collect live web and lore context
+            val liveKnowledge = coroutineScope {
+                val wDeferred = async { queryWikipedia(cleanTopic) }
+                val dDeferred = async { queryDuckDuckGo(cleanTopic) }
+                val bDeferred = async { queryBrave(cleanTopic) }
+                val w = wDeferred.await()
+                val d = dDeferred.await()
+                val b = bDeferred.await()
+                buildString {
+                    if (!w?.extract.isNullOrBlank()) append("Wikipedia: ").append(w!!.extract).append("\n\n")
+                    if (!d?.abstractText.isNullOrBlank()) append("DuckDuckGo: ").append(d!!.abstractText).append("\n\n")
+                    d?.webResults?.take(3)?.forEach { append("• ").append(it.title).append(": ").append(it.snippet).append("\n") }
+                    b?.snippets?.take(2)?.forEach { append("Brave Snippet: ").append(it).append("\n") }
+                }
+            }
+
+            // 1. Primary: Try Microsoft Foundry Local via Android IPC service app
+            if (context != null && FoundryIpcManager.isSupportedOs() && FoundryIpcManager.isFoundryAppInstalled(context)) {
+                val ipcResult = FoundryIpcManager.chat(
+                    context = context,
+                    query = query,
+                    bookTitle = book?.title,
+                    bookAuthor = book?.author,
+                    preferredModel = foundryModel,
+                    liveKnowledgeContext = liveKnowledge.takeIf { it.isNotBlank() },
+                )
+                if (ipcResult.isSuccess && ipcResult.text.isNotBlank()) {
+                    return@withContext AiChatMessage(
+                        sender = ChatSender.Assistant,
+                        text = ipcResult.text,
+                        sources = listOf(
+                            ChatSource("Foundry Local IPC", ipcResult.modelUsed.ifBlank { foundryModel }),
+                            ChatSource("Live Knowledge Tools", "Wikipedia & Web Search"),
+                        ),
+                    )
+                }
+            }
+
+            // 2. Secondary: Try local HTTP server endpoint (e.g. PC server / port forwarding)
             if (localLlmClient.isAvailable()) {
                 val agenticResult = localLlmClient.chatWithAgenticSearch(
                     query = query,
                     bookTitle = book?.title,
                     bookAuthor = book?.author,
-                ) { toolQuery ->
-                    runBlocking(Dispatchers.IO) {
-                        val wDeferred = async { queryWikipedia(toolQuery) }
-                        val dDeferred = async { queryDuckDuckGo(toolQuery) }
-                        val bDeferred = async { queryBrave(toolQuery) }
-                        val w = wDeferred.await()
-                        val d = dDeferred.await()
-                        val b = bDeferred.await()
-                        buildString {
-                            if (!w?.extract.isNullOrBlank()) append("Wikipedia: ").append(w!!.extract).append("\n\n")
-                            if (!d?.abstractText.isNullOrBlank()) append("DuckDuckGo: ").append(d!!.abstractText).append("\n\n")
-                            d?.webResults?.take(3)?.forEach { append("• ").append(it.title).append(": ").append(it.snippet).append("\n") }
-                            b?.snippets?.take(2)?.forEach { append("Brave Snippet: ").append(it).append("\n") }
-                        }
-                    }
-                }
+                ) { _ -> liveKnowledge }
                 if (agenticResult != null && agenticResult.first.isNotBlank()) {
                     return@withContext AiChatMessage(
                         sender = ChatSender.Assistant,
                         text = agenticResult.first,
                         sources = listOf(
-                            ChatSource("Microsoft Foundry Local", foundryModel),
+                            ChatSource("Microsoft Foundry Local (Server)", foundryModel),
                             ChatSource("Live Web & Knowledge Tools", "Agentic Tool Result"),
                         ),
                     )
                 }
             }
 
-            // Fallback: If Foundry Local is not reachable or returned null, execute Fast Local search
-            // and attach a clear notice so the user still gets an instant reliable answer
+            // 3. Fallback: If Foundry Local IPC service and HTTP are offline, synthesize via Fast Local Search
             val fastResult = executeFastLocalSearch(cleanTopic, query, book)
-            val fallbackNotice = "\n\n> ℹ️ *Foundry Local service was not detected at `$foundryEndpoint`. Response derived via Fast Local Search. You can start Foundry Local or switch engines in Settings.*"
+            val fallbackNotice = when {
+                context != null && !FoundryIpcManager.isFoundryAppInstalled(context) -> {
+                    "\n\n> ℹ️ *Microsoft Foundry Local app is not installed on this device. Response derived via Fast Local Search. You can install **Foundry Local** (`com.microsoft.foundrylocal.app`) from Google Play.*"
+                }
+                context != null && !FoundryIpcManager.isSupportedOs() -> {
+                    "\n\n> ℹ️ *Microsoft Foundry Local requires Android 13+ (API 33). Response derived via Fast Local Search.*"
+                }
+                else -> {
+                    "\n\n> ℹ️ *Microsoft Foundry Local service was not detected. Response derived via Fast Local Search. Ensure the Foundry Local app is running.*"
+                }
+            }
             return@withContext fastResult.copy(
                 text = fastResult.text + fallbackNotice,
                 sources = fastResult.sources + listOf(ChatSource("Foundry Local Fallback", "Service Offline")),

@@ -290,5 +290,11 @@ class AiChatEngineTest {
         assertEquals(ChatSender.Assistant, fastResult.sender)
         assertTrue(fastResult.text.isNotBlank())
     }
+
+    @Test
+    fun testFoundryIpcManagerPackageConstants() {
+        assertEquals("com.microsoft.foundrylocal.app", FoundryIpcManager.FOUNDRY_APP_PACKAGE)
+        assertEquals("market://details?id=com.microsoft.foundrylocal.app", FoundryIpcManager.PLAY_STORE_MARKET_URI)
+    }
 }
 

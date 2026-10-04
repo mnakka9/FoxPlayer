@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import mn.blazeapps.foxplayer.data.ai.FoundryIpcManager
 import mn.blazeapps.foxplayer.data.ai.LocalChatEngineMode
 import mn.blazeapps.foxplayer.data.ai.LocalChatPreferences
 import mn.blazeapps.foxplayer.data.ai.LocalLlmClient
@@ -58,6 +60,8 @@ fun SettingsDialog(
 ) {
     val isDark = MaterialTheme.colorScheme.background == BgDeep
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var isFoundryAppInstalled by remember { mutableStateOf(FoundryIpcManager.isFoundryAppInstalled(context)) }
     var isTestingConnection by remember { mutableStateOf(false) }
     var connectionStatusText by remember { mutableStateOf<String?>(null) }
     var isConnectionSuccess by remember { mutableStateOf(false) }
@@ -583,13 +587,66 @@ fun SettingsDialog(
                                             modifier = Modifier.padding(vertical = 2.dp),
                                         )
 
+                                        // Foundry Local Companion App Status & Action
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            ) {
+                                                Icon(
+                                                    if (isFoundryAppInstalled) Icons.Default.CheckCircle else Icons.Default.Info,
+                                                    contentDescription = null,
+                                                    tint = if (isFoundryAppInstalled) Color(0xFF34D399) else ColorOrangeLight,
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                                Column {
+                                                    Text(
+                                                        if (isFoundryAppInstalled) "Foundry Local Service Ready" else "Foundry Local App Not Installed",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = if (isFoundryAppInstalled) (if (isDark) Color(0xFF34D399) else Color(0xFF059669)) else (if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary),
+                                                    )
+                                                    Text(
+                                                        if (isFoundryAppInstalled) "Runs via IPC (Zero APK bloat)" else "Install from Google Play to run local models",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                                                    )
+                                                }
+                                            }
+
+                                            FilledTonalButton(
+                                                onClick = {
+                                                    if (isFoundryAppInstalled) {
+                                                        val intent = FoundryIpcManager.createLaunchAppIntent(context)
+                                                        if (intent != null) context.startActivity(intent)
+                                                    } else {
+                                                        context.startActivity(FoundryIpcManager.createPlayStoreIntent())
+                                                    }
+                                                },
+                                                shape = RoundedCornerShape(10.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                            ) {
+                                                Icon(
+                                                    if (isFoundryAppInstalled) Icons.Default.Launch else Icons.Default.Shop,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(14.dp),
+                                                )
+                                                Spacer(Modifier.width(4.dp))
+                                                Text(if (isFoundryAppInstalled) "Open App" else "Install App", fontSize = 11.sp)
+                                            }
+                                        }
+
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                                         ) {
-                                            SpecChip(label = "Runtime", value = "ONNX GenAI", isDark = isDark)
-                                            SpecChip(label = "Hardware", value = "CPU / NPU", isDark = isDark)
-                                            SpecChip(label = "Privacy", value = "100% Local", isDark = isDark)
+                                            SpecChip(label = "Mode", value = "Android IPC", isDark = isDark)
+                                            SpecChip(label = "Service", value = "Separate App", isDark = isDark)
+                                            SpecChip(label = "Privacy", value = "100% On-Device", isDark = isDark)
                                         }
 
                                         // Model Selection Dropdown for Foundry Local
