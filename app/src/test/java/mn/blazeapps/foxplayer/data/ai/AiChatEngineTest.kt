@@ -144,4 +144,37 @@ class AiChatEngineTest {
             result.sources.any { it.type == "Wikipedia" || it.type == "DuckDuckGo" || it.type == "Brave Search" }
         )
     }
+
+    @Test
+    fun testSanitizeCompleteSentencesDanglingPreposition() {
+        val raw = "The eruption of Lake Toba occurred around 74,000 years ago, during..."
+        val healed = mn.blazeapps.foxplayer.data.onnx.OnnxBookMetadataEngine.sanitizeCompleteSentences(raw)
+        assertEquals("The eruption of Lake Toba occurred around 74,000 years ago.", healed)
+    }
+
+    @Test
+    fun testSanitizeCompleteSentencesMultiParagraphPreservation() {
+        val raw = "First paragraph with complete thought.\n\nSecond paragraph also complete."
+        val healed = mn.blazeapps.foxplayer.data.onnx.OnnxBookMetadataEngine.sanitizeCompleteSentences(raw)
+        assertEquals("First paragraph with complete thought.\n\nSecond paragraph also complete.", healed)
+    }
+
+    @Test
+    fun testSanitizeCompleteSentencesRollbackToTerminal() {
+        val raw = "Toba is a large caldera. A massive supervolcano eruption occurred during the late Pleistocene..."
+        val healed = mn.blazeapps.foxplayer.data.onnx.OnnxBookMetadataEngine.sanitizeCompleteSentences(raw)
+        assertTrue(healed.endsWith("."))
+        assertFalse(healed.contains("..."))
+    }
+
+    @Test
+    fun testStripMarkdownForPlainText() {
+        val md = "### 🌐 Lake Toba\n*(Volcano in Indonesia)*\n\n**Key Details:**\n> Massive caldera lake."
+        val plain = mn.blazeapps.foxplayer.ui.book.stripMarkdownForPlainText(md)
+        assertFalse(plain.contains("###"))
+        assertFalse(plain.contains("**"))
+        assertFalse(plain.contains(">"))
+        assertTrue(plain.contains("Lake Toba"))
+        assertTrue(plain.contains("Massive caldera lake."))
+    }
 }

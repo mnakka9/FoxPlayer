@@ -28,37 +28,69 @@ class OnnxBookMetadataEngine(
         private const val TAG = "FoxPlayer-ONNX"
 
         fun sanitizeCompleteSentences(text: String): String {
+            if (text.isBlank()) return ""
+
+            val paragraphs = text.split("\n\n").map { it.trim() }.filter { it.isNotBlank() }
+            if (paragraphs.size > 1) {
+                return paragraphs.mapNotNull { p ->
+                    val sanitized = sanitizeSingleParagraph(p)
+                    sanitized.takeIf { it.isNotBlank() }
+                }.joinToString("\n\n")
+            }
+
+            return sanitizeSingleParagraph(text)
+        }
+
+        private fun sanitizeSingleParagraph(text: String): String {
             var s = text.trim()
                 .replace("…", "...")
-                .replace(Regex("\\s+"), " ")
+                .replace(Regex("[ \t]+"), " ")
 
+            if (s.isBlank()) return ""
+
+            var hadEllipsis = false
             if (s.endsWith("...")) {
-                val withoutEllipsis = s.removeSuffix("...").trim()
-                val lastSentenceEnd = maxOf(
-                    withoutEllipsis.lastIndexOf('.'),
-                    withoutEllipsis.lastIndexOf('!'),
-                    withoutEllipsis.lastIndexOf('?')
-                )
-                s = if (lastSentenceEnd > 40) {
-                    withoutEllipsis.substring(0, lastSentenceEnd + 1).trim()
-                } else {
-                    "$withoutEllipsis."
-                }
-            } else {
-                val lastChar = s.lastOrNull()
-                if (lastChar != null && lastChar != '.' && lastChar != '!' && lastChar != '?') {
-                    val lastSentenceEnd = maxOf(
-                        s.lastIndexOf('.'),
-                        s.lastIndexOf('!'),
-                        s.lastIndexOf('?')
-                    )
-                    s = if (lastSentenceEnd > 40) {
-                        s.substring(0, lastSentenceEnd + 1).trim()
-                    } else {
-                        "$s."
-                    }
+                s = s.removeSuffix("...").trim().trimEnd(',', ';', ':', '-', '—')
+                hadEllipsis = true
+            }
+
+            val lastTerminal = maxOf(
+                s.lastIndexOf('.'),
+                s.lastIndexOf('!'),
+                s.lastIndexOf('?')
+            )
+
+            if (hadEllipsis) {
+                if (lastTerminal >= 35) {
+                    return s.substring(0, lastTerminal + 1).trim()
                 }
             }
+
+            val lastChar = s.lastOrNull()
+            if (lastChar != null && lastChar != '.' && lastChar != '!' && lastChar != '?') {
+                if (lastTerminal >= 40) {
+                    return s.substring(0, lastTerminal + 1).trim()
+                }
+
+                val danglingWords = setOf(
+                    "during", "and", "or", "the", "a", "an", "in", "on", "at", "to", "for",
+                    "of", "with", "by", "from", "that", "which", "as", "because", "although",
+                    "while", "is", "was", "are", "were", "where", "when", "who", "whom", "whose",
+                    "it", "its", "their", "into", "onto", "about", "such", "but", "so"
+                )
+
+                val words = s.split(" ").toMutableList()
+                while (words.isNotEmpty() && words.last().lowercase().trim(',', ';', ':', '-', '—') in danglingWords) {
+                    words.removeAt(words.size - 1)
+                }
+
+                if (words.size >= 5) {
+                    s = words.joinToString(" ").trimEnd(',', ';', ':', '-', '—') + "."
+                } else {
+                    return ""
+                }
+            }
+
             return s
         }
     }

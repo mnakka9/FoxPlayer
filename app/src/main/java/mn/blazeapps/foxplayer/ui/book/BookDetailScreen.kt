@@ -516,7 +516,8 @@ fun BookDetailScreen(
                         onValueChange = { bookmarkNote = it },
                         label = { Text("Note (optional)") },
                         placeholder = { Text("Enter a note...") },
-                        singleLine = true,
+                        maxLines = 5,
+                        minLines = 1,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -707,6 +708,11 @@ fun BookDetailScreen(
             isGenerating = isChatGenerating,
             onSendMessage = viewModel::sendChatMessage,
             onClearChat = viewModel::clearChat,
+            onAddBookmarkNote = { noteText ->
+                bookmarkNote = noteText
+                showChatDialog = false
+                showBookmarkDialog = true
+            },
             onDismiss = { showChatDialog = false },
         )
     }

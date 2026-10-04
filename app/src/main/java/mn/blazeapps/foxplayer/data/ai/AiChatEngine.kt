@@ -251,14 +251,29 @@ class AiChatEngine(
         return s.ifBlank { query }
     }
 
+    private fun isCleanContentSnippet(snippet: String): Boolean {
+        val s = snippet.trim()
+        if (s.length < 40) return false
+        // Reject URL breadcrumb paths, domains, and search engine navigation
+        if (s.contains("›") || s.contains(" > ") || s.contains("http://") || s.contains("https://") ||
+            s.contains(".org") || s.contains(".com") || s.contains(".net") || s.contains(".edu") ||
+            s.contains(".gov") || s.contains(".html") || s.contains("Wikipedia en.") ||
+            s.contains("Search the Web") || s.contains("Brave Search")
+        ) {
+            return false
+        }
+        if (s.count { it == ' ' } < 4) return false
+        return true
+    }
+
     private fun queryWikipedia(topic: String): WikiSearchData? {
         return try {
             val encoded = URLEncoder.encode(topic, "UTF-8")
             val searchUrl = "https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=$encoded&format=json"
 
             val searchConn = (URL(searchUrl).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 5000
-                readTimeout = 5000
+                connectTimeout = 6000
+                readTimeout = 6000
                 setRequestProperty("User-Agent", "FoxPlayer/1.1.0 (Android Audiobook Assistant)")
             }
             if (searchConn.responseCode != 200) {
@@ -275,7 +290,7 @@ class AiChatEngine(
             if (topTitle.isBlank()) return null
 
             val snippets = mutableListOf<String>()
-            for (i in 0 until minOf(3, searchResults.length())) {
+            for (i in 0 until minOf(4, searchResults.length())) {
                 val item = searchResults.getJSONObject(i)
                 val s = item.optString("snippet")
                     .replace(Regex("<[^>]+>"), "")
@@ -283,31 +298,70 @@ class AiChatEngine(
                     .replace("&#039;", "'")
                     .replace("&amp;", "&")
                     .trim()
-                if (s.isNotBlank() && s.length > 20) {
+                if (s.isNotBlank() && s.length > 30) {
                     snippets.add(s)
                 }
             }
 
-            val summaryUrl = "https://en.wikipedia.org/api/rest_v1/page/summary/${URLEncoder.encode(topTitle, "UTF-8")}"
-            val sumConn = (URL(summaryUrl).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 5000
-                readTimeout = 5000
-                setRequestProperty("User-Agent", "FoxPlayer/1.1.0")
-            }
-            if (sumConn.responseCode != 200) {
-                sumConn.disconnect()
-                return WikiSearchData(title = topTitle, description = null, extract = null, snippets = snippets)
-            }
-            val sumJson = JSONObject(sumConn.inputStream.bufferedReader().use { it.readText() })
-            sumConn.disconnect()
+            val safeTitle = topTitle.replace(" ", "_")
+            var fullExtract: String? = null
+            var description: String? = null
 
-            val extract = sumJson.optString("extract").takeIf { it.isNotBlank() }
-            val description = sumJson.optString("description").takeIf { it.isNotBlank() }
+            // 1. Fetch REST summary
+            try {
+                val encodedSafe = URLEncoder.encode(safeTitle, "UTF-8")
+                val summaryUrl = "https://en.wikipedia.org/api/rest_v1/page/summary/$encodedSafe"
+                val sumConn = (URL(summaryUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 6000
+                    readTimeout = 6000
+                    setRequestProperty("User-Agent", "FoxPlayer/1.1.0 (Android Audiobook Assistant)")
+                }
+                if (sumConn.responseCode == 200) {
+                    val sumJson = JSONObject(sumConn.inputStream.bufferedReader().use { it.readText() })
+                    fullExtract = sumJson.optString("extract").takeIf { it.isNotBlank() }
+                    description = sumJson.optString("description").takeIf { it.isNotBlank() }
+                }
+                sumConn.disconnect()
+            } catch (e: Exception) {
+                logE("Wikipedia REST summary error", e)
+            }
+
+            // 2. Fetch extensive multi-paragraph extract from Wikipedia Action API for rich, detailed knowledge
+            try {
+                val encodedSafe = URLEncoder.encode(safeTitle, "UTF-8")
+                val extractApiUrl = "https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&exchars=1800&titles=$encodedSafe&format=json"
+                val extConn = (URL(extractApiUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 6000
+                    readTimeout = 6000
+                    setRequestProperty("User-Agent", "FoxPlayer/1.1.0 (Android Audiobook Assistant)")
+                }
+                if (extConn.responseCode == 200) {
+                    val extJson = JSONObject(extConn.inputStream.bufferedReader().use { it.readText() })
+                    val pages = extJson.optJSONObject("query")?.optJSONObject("pages")
+                    if (pages != null) {
+                        val firstKey = pages.keys().asSequence().firstOrNull()
+                        if (firstKey != null) {
+                            val pageObj = pages.optJSONObject(firstKey)
+                            val detailedText = pageObj?.optString("extract")?.trim()
+                            if (!detailedText.isNullOrBlank() && detailedText.length > (fullExtract?.length ?: 0)) {
+                                val cleanedText = detailedText
+                                    .replace(Regex("==+\\s*([^=]+)\\s*==+"), "\n\n**$1**\n")
+                                    .replace(Regex("\n{3,}"), "\n\n")
+                                    .trim()
+                                fullExtract = cleanedText
+                            }
+                        }
+                    }
+                }
+                extConn.disconnect()
+            } catch (e: Exception) {
+                logE("Wikipedia Action API extract error", e)
+            }
 
             WikiSearchData(
                 title = topTitle,
                 description = description,
-                extract = extract,
+                extract = fullExtract,
                 snippets = snippets,
             )
         } catch (e: Exception) {
@@ -423,7 +477,12 @@ class AiChatEngine(
                     .trim()
                 if (clean.length > 40 && !clean.startsWith("Search the Web", ignoreCase = true)) {
                     val trimmedSnippet = clean.replace(Regex("^\\d+\\s+[A-Za-z]+\\s+\\d{4}\\s*-\\s*"), "")
-                    snippets.add(trimmedSnippet)
+                    if (isCleanContentSnippet(trimmedSnippet)) {
+                        val healed = OnnxBookMetadataEngine.sanitizeCompleteSentences(trimmedSnippet)
+                        if (healed.isNotBlank() && healed.length > 35) {
+                            snippets.add(healed)
+                        }
+                    }
                 }
             }
 
@@ -433,8 +492,11 @@ class AiChatEngine(
                 val quoteMatches = quoteRegex.findAll(html).take(3).toList()
                 for (m in quoteMatches) {
                     val q = m.groups[1]?.value.orEmpty()
-                    if (!q.contains("Brave") && !q.contains("Search the Web")) {
-                        snippets.add(q)
+                    if (!q.contains("Brave") && !q.contains("Search the Web") && isCleanContentSnippet(q)) {
+                        val healed = OnnxBookMetadataEngine.sanitizeCompleteSentences(q)
+                        if (healed.isNotBlank() && healed.length > 35) {
+                            snippets.add(healed)
+                        }
                     }
                 }
             }
@@ -497,44 +559,48 @@ class AiChatEngine(
             sb.append("**Definition:** ${OnnxBookMetadataEngine.sanitizeCompleteSentences(ddg.definition)}\n\n")
         }
 
-        if (!wiki?.extract.isNullOrBlank()) {
-            sb.append(OnnxBookMetadataEngine.sanitizeCompleteSentences(wiki.extract)).append("\n\n")
-        } else if (!ddg?.abstractText.isNullOrBlank()) {
-            sb.append(OnnxBookMetadataEngine.sanitizeCompleteSentences(ddg.abstractText)).append("\n\n")
-        } else if (!ddg?.answer.isNullOrBlank()) {
-            sb.append(OnnxBookMetadataEngine.sanitizeCompleteSentences(ddg.answer)).append("\n\n")
+        val mainExtract = wiki?.extract ?: ddg?.abstractText ?: ddg?.answer
+        if (!mainExtract.isNullOrBlank()) {
+            sb.append(OnnxBookMetadataEngine.sanitizeCompleteSentences(mainExtract)).append("\n\n")
         }
 
         // 2. Key Details & Context synthesized across sources with complete sentence healing
         val keyPoints = mutableListOf<String>()
+        val mainTextLower = (mainExtract ?: "").lowercase()
 
         // From Brave Search snippets
         brave?.snippets?.forEach { snippet ->
-            val cleaned = OnnxBookMetadataEngine.sanitizeCompleteSentences(snippet)
-            if (cleaned.length > 35 && keyPoints.none { it.take(30).equals(cleaned.take(30), ignoreCase = true) }) {
-                keyPoints.add(cleaned)
+            if (isCleanContentSnippet(snippet)) {
+                val cleaned = OnnxBookMetadataEngine.sanitizeCompleteSentences(snippet)
+                if (cleaned.length > 35 && !mainTextLower.contains(cleaned.take(35).lowercase()) && keyPoints.none { it.take(30).equals(cleaned.take(30), ignoreCase = true) }) {
+                    keyPoints.add(cleaned)
+                }
             }
         }
 
         // From DuckDuckGo related topics
         ddg?.relatedTopics?.forEach { topic ->
-            val cleaned = OnnxBookMetadataEngine.sanitizeCompleteSentences(topic)
-            if (cleaned.length > 30 && keyPoints.none { it.take(30).equals(cleaned.take(30), ignoreCase = true) }) {
-                keyPoints.add(cleaned)
+            if (isCleanContentSnippet(topic)) {
+                val cleaned = OnnxBookMetadataEngine.sanitizeCompleteSentences(topic)
+                if (cleaned.length > 30 && !mainTextLower.contains(cleaned.take(35).lowercase()) && keyPoints.none { it.take(30).equals(cleaned.take(30), ignoreCase = true) }) {
+                    keyPoints.add(cleaned)
+                }
             }
         }
 
         // From Wikipedia search snippets
         wiki?.snippets?.forEach { snippet ->
-            val cleaned = OnnxBookMetadataEngine.sanitizeCompleteSentences(snippet)
-            if (cleaned.length > 35 && keyPoints.none { it.take(30).equals(cleaned.take(30), ignoreCase = true) }) {
-                keyPoints.add(cleaned)
+            if (isCleanContentSnippet(snippet)) {
+                val cleaned = OnnxBookMetadataEngine.sanitizeCompleteSentences(snippet)
+                if (cleaned.length > 35 && !mainTextLower.contains(cleaned.take(35).lowercase()) && keyPoints.none { it.take(30).equals(cleaned.take(30), ignoreCase = true) }) {
+                    keyPoints.add(cleaned)
+                }
             }
         }
 
         if (keyPoints.isNotEmpty()) {
-            sb.append("**Key Details & Context:**\n")
-            keyPoints.take(4).forEach { point ->
+            sb.append("**Key Insights & Lore:**\n")
+            keyPoints.take(3).forEach { point ->
                 sb.append("• ").append(point).append("\n")
             }
             sb.append("\n")

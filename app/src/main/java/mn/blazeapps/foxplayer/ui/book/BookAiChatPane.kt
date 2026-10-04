@@ -1,5 +1,6 @@
 package mn.blazeapps.foxplayer.ui.book
 
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,12 +17,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,7 +35,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -51,6 +62,7 @@ fun BookAiChatDialog(
     isGenerating: Boolean,
     onSendMessage: (String) -> Unit,
     onClearChat: () -> Unit,
+    onAddBookmarkNote: (String) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val isDark = MaterialTheme.colorScheme.background == BgDeep
@@ -201,7 +213,11 @@ fun BookAiChatDialog(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         items(messages, key = { it.id }) { msg ->
-                            ChatBubble(msg = msg, isDark = isDark)
+                            ChatBubble(
+                                msg = msg,
+                                isDark = isDark,
+                                onAddBookmarkNote = onAddBookmarkNote,
+                            )
                         }
 
                         if (isGenerating) {
@@ -379,8 +395,11 @@ private fun ChatScrollbar(
 private fun ChatBubble(
     msg: AiChatMessage,
     isDark: Boolean,
+    onAddBookmarkNote: (String) -> Unit,
 ) {
     val isUser = msg.sender == ChatSender.User
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -419,15 +438,17 @@ private fun ChatBubble(
             border = if (!isUser) {
                 BorderStroke(1.dp, if (isDark) GlassBorderSubtle else MaterialTheme.colorScheme.outlineVariant)
             } else null,
-            modifier = Modifier.widthIn(max = 310.dp),
+            modifier = if (isUser) Modifier.widthIn(max = 300.dp) else Modifier.fillMaxWidth(0.96f),
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = msg.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isUser) Color.White else if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
-                    lineHeight = 20.sp,
-                )
+                // Selectable text & rendered markdown
+                SelectionContainer {
+                    MarkdownContentView(
+                        markdown = msg.text,
+                        isDark = isDark,
+                        isUser = isUser,
+                    )
+                }
 
                 if (msg.sources.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
@@ -440,6 +461,249 @@ private fun ChatBubble(
                             SourceBadge(src, isDark)
                         }
                     }
+                }
+
+                if (!isUser) {
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(
+                            onClick = {
+                                val cleanPlainText = stripMarkdownForPlainText(msg.text)
+                                onAddBookmarkNote(cleanPlainText)
+                            },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.BookmarkAdd,
+                                contentDescription = "Add to Chapter Notes",
+                                tint = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(15.dp),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "Add Note",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                val cleanPlainText = stripMarkdownForPlainText(msg.text)
+                                clipboardManager.setText(AnnotatedString(cleanPlainText))
+                                Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.ContentCopy,
+                                contentDescription = "Copy text",
+                                tint = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(15.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun stripMarkdownForPlainText(text: String): String {
+    return text
+        .replace(Regex("(?m)^#{1,6}\\s+"), "")
+        .replace("**", "")
+        .replace(Regex("(?<!\\*)\\*(?!\\*)"), "")
+        .replace("`", "")
+        .replace(Regex("(?m)^>\\s+"), "")
+        .trim()
+}
+
+fun parseInlineMarkdown(text: String, defaultColor: Color): AnnotatedString {
+    return buildAnnotatedString {
+        var i = 0
+        val len = text.length
+        while (i < len) {
+            if (i + 1 < len && text[i] == '*' && text[i + 1] == '*') {
+                val end = text.indexOf("**", i + 2)
+                if (end != -1) {
+                    val boldContent = text.substring(i + 2, end)
+                    pushStyle(SpanStyle(fontWeight = FontWeight.Bold, color = defaultColor))
+                    append(boldContent)
+                    pop()
+                    i = end + 2
+                    continue
+                }
+            }
+            if (text[i] == '*' && (i == 0 || text[i - 1] != '*') && (i + 1 == len || text[i + 1] != '*')) {
+                val end = text.indexOf('*', i + 1)
+                if (end != -1 && (end + 1 == len || text[end + 1] != '*')) {
+                    val italicContent = text.substring(i + 1, end)
+                    pushStyle(SpanStyle(fontStyle = FontStyle.Italic, color = defaultColor))
+                    append(italicContent)
+                    pop()
+                    i = end + 1
+                    continue
+                }
+            }
+            if (text[i] == '`') {
+                val end = text.indexOf('`', i + 1)
+                if (end != -1) {
+                    val codeContent = text.substring(i + 1, end)
+                    pushStyle(SpanStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium))
+                    append(codeContent)
+                    pop()
+                    i = end + 1
+                    continue
+                }
+            }
+            append(text[i])
+            i++
+        }
+    }
+}
+
+@Composable
+fun MarkdownContentView(
+    markdown: String,
+    isDark: Boolean,
+    isUser: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val primaryTextColor = if (isUser) Color.White else if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface
+    val headingColor = if (isUser) Color.White else if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary
+    val quoteBorderColor = if (isUser) Color.White.copy(alpha = 0.6f) else ColorOrange
+
+    val lines = remember(markdown) { markdown.lines() }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        for (line in lines) {
+            val trimmed = line.trim()
+            when {
+                trimmed.isBlank() -> {
+                    Spacer(Modifier.height(4.dp))
+                }
+                trimmed.startsWith("### ") -> {
+                    val headerText = trimmed.removePrefix("### ").trim()
+                    Text(
+                        text = parseInlineMarkdown(headerText, headingColor),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = headingColor,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
+                    )
+                }
+                trimmed.startsWith("## ") -> {
+                    val headerText = trimmed.removePrefix("## ").trim()
+                    Text(
+                        text = parseInlineMarkdown(headerText, headingColor),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = headingColor,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
+                    )
+                }
+                trimmed.startsWith("# ") -> {
+                    val headerText = trimmed.removePrefix("# ").trim()
+                    Text(
+                        text = parseInlineMarkdown(headerText, headingColor),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = headingColor,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
+                    )
+                }
+                trimmed.startsWith("> ") -> {
+                    val quoteText = trimmed.removePrefix("> ").trim()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (isDark) Color(0x22F97316) else MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(16.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(quoteBorderColor)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = parseInlineMarkdown(quoteText, primaryTextColor),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
+                            color = primaryTextColor,
+                        )
+                    }
+                }
+                trimmed.startsWith("• ") || trimmed.startsWith("- ") || trimmed.startsWith("* ") -> {
+                    val bulletText = trimmed.replace(Regex("^[•\\-*]\\s+"), "")
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 1.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Text(
+                            text = "•",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(end = 6.dp),
+                        )
+                        Text(
+                            text = parseInlineMarkdown(bulletText, primaryTextColor),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = primaryTextColor,
+                            lineHeight = 20.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                Regex("^\\d+\\.\\s+.*").matches(trimmed) -> {
+                    val match = Regex("^(\\d+\\.)\\s+(.*)").find(trimmed)
+                    val num = match?.groupValues?.get(1) ?: "•"
+                    val itemText = match?.groupValues?.get(2) ?: trimmed
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 1.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Text(
+                            text = num,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(end = 6.dp),
+                        )
+                        Text(
+                            text = parseInlineMarkdown(itemText, primaryTextColor),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = primaryTextColor,
+                            lineHeight = 20.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                else -> {
+                    Text(
+                        text = parseInlineMarkdown(trimmed, primaryTextColor),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = primaryTextColor,
+                        lineHeight = 20.sp,
+                    )
                 }
             }
         }
