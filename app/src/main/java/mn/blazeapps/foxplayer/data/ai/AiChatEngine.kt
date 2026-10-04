@@ -3,6 +3,7 @@ package mn.blazeapps.foxplayer.data.ai
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import mn.blazeapps.foxplayer.data.BookmarkWithChapter
 import mn.blazeapps.foxplayer.data.entities.BookEntity
@@ -22,12 +23,18 @@ data class WikiSearchData(
     val snippets: List<String> = emptyList(),
 )
 
+data class DdgResultItem(
+    val title: String,
+    val snippet: String,
+)
+
 data class DdgSearchData(
     val heading: String?,
     val definition: String?,
     val abstractText: String?,
     val answer: String?,
     val relatedTopics: List<String> = emptyList(),
+    val webResults: List<DdgResultItem> = emptyList(),
 )
 
 data class BraveSearchData(
@@ -60,6 +67,7 @@ data class ParsedSeries(
 class AiChatEngine(
     private val modelManager: OnnxModelManager? = null,
     private val onnxEngine: OnnxBookMetadataEngine? = null,
+    private val localLlmClient: LocalLlmClient = LocalLlmClient(),
 ) {
     companion object {
         private const val TAG = "FoxPlayer-AiChat"
@@ -95,21 +103,88 @@ class AiChatEngine(
         val trimmed = query.trim()
         val lower = trimmed.lowercase()
 
-        // ONLY filter: internal notes / bookmarks search
+        // 1. Internal notes / bookmarks search
         if (isNotesQuery(lower)) {
             return@withContext handleInternalNotes(trimmed, lower, book, bookmarks)
         }
 
-        // ALL other queries: multi-engine web search across DuckDuckGo, Wikipedia & Brave Search + LLM summarization
+        // 2. Direct audiobook metadata queries (Author, chapters, synopsis)
+        if (book != null && isBookMetadataQuery(lower)) {
+            return@withContext handleBookMetadata(lower, book, chapters)
+        }
+
+        // 3. Multi-engine search across Wikipedia, DuckDuckGo & Brave Search + Local LLM/ONNX synthesis
         searchWebAndSummarize(trimmed, book)
     }
 
     private fun isNotesQuery(lower: String): Boolean {
         return lower.contains("bookmark") ||
             lower.contains("note") ||
-            lower.contains("notes") ||
             lower.contains("marked") ||
             lower.contains("my highlights")
+    }
+
+    private fun isBookMetadataQuery(lower: String): Boolean {
+        return lower.contains("who wrote") ||
+            lower.contains("who is the author") ||
+            lower.contains("author of this") ||
+            lower.contains("what is this book about") ||
+            lower.contains("book synopsis") ||
+            lower.contains("book summary") ||
+            lower.contains("book description") ||
+            lower.contains("how many chapters") ||
+            lower.contains("list chapters") ||
+            lower.contains("chapter count") ||
+            lower.contains("about this book")
+    }
+
+    private fun handleBookMetadata(
+        lower: String,
+        book: BookEntity,
+        chapters: List<ChapterEntity>,
+    ): AiChatMessage {
+        val sb = StringBuilder()
+        when {
+            lower.contains("author") || lower.contains("who wrote") -> {
+                sb.append("### ✍️ Author Information\n\n")
+                if (!book.author.isNullOrBlank()) {
+                    sb.append("**${book.title}** is written by **${book.author}**.")
+                } else {
+                    sb.append("The author for **${book.title}** is not listed in your metadata.")
+                }
+            }
+            lower.contains("chapter") -> {
+                sb.append("### 📚 Chapter Overview\n\n")
+                sb.append("**${book.title}** contains **${chapters.size} chapters**.")
+                if (chapters.isNotEmpty()) {
+                    sb.append("\n\n")
+                    chapters.take(5).forEachIndexed { i, ch ->
+                        sb.append("• **${i + 1}. ${ch.displayName}** (`${formatDuration(ch.durationMs)}`)\n")
+                    }
+                    if (chapters.size > 5) {
+                        sb.append("*(and ${chapters.size - 5} more chapters)*")
+                    }
+                }
+            }
+            else -> {
+                sb.append("### 📖 About *${book.title}*\n\n")
+                if (!book.author.isNullOrBlank()) {
+                    sb.append("**Author:** ${book.author}\n\n")
+                }
+                if (!book.genres.isNullOrBlank()) {
+                    sb.append("**Genres:** ${book.genres}\n\n")
+                }
+                if (!book.description.isNullOrBlank()) {
+                    sb.append("**Synopsis:**\n${book.description}\n\n")
+                }
+                sb.append("📊 **Chapters:** ${chapters.size} total tracks")
+            }
+        }
+        return AiChatMessage(
+            sender = ChatSender.Assistant,
+            text = sb.toString().trim(),
+            sources = listOf(ChatSource(book.title, "Audiobook Metadata")),
+        )
     }
 
     private fun handleInternalNotes(
@@ -234,7 +309,39 @@ class AiChatEngine(
     ): AiChatMessage = withContext(Dispatchers.IO) {
         val cleanTopic = cleanSearchTopic(query)
 
-        // Query Wikipedia, DuckDuckGo, and Brave Search concurrently
+        // 1. If Qualcomm GenieX runtime / local OpenAI-compatible endpoint is available,
+        // execute the agentic tool-calling loop (Model calls web_search -> Android executes search -> Model synthesizes)
+        if (localLlmClient.isAvailable()) {
+            val agenticResult = localLlmClient.chatWithAgenticSearch(query) { toolQuery ->
+                runBlocking(Dispatchers.IO) {
+                    val wDeferred = async { queryWikipedia(toolQuery) }
+                    val dDeferred = async { queryDuckDuckGo(toolQuery) }
+                    val bDeferred = async { queryBrave(toolQuery) }
+                    val w = wDeferred.await()
+                    val d = dDeferred.await()
+                    val b = bDeferred.await()
+                    buildString {
+                        if (!w?.extract.isNullOrBlank()) append("Wikipedia: ").append(w!!.extract).append("\n\n")
+                        if (!d?.abstractText.isNullOrBlank()) append("DuckDuckGo: ").append(d!!.abstractText).append("\n\n")
+                        d?.webResults?.take(3)?.forEach { append("• ").append(it.title).append(": ").append(it.snippet).append("\n") }
+                        b?.snippets?.take(2)?.forEach { append("Brave Snippet: ").append(it).append("\n") }
+                    }
+                }
+            }
+            if (agenticResult != null) {
+                return@withContext AiChatMessage(
+                    sender = ChatSender.Assistant,
+                    text = agenticResult.first,
+                    sources = listOf(
+                        ChatSource("Local LLM (GenieX/Qwen)", "Agentic Tool Calling"),
+                        ChatSource("Live Web Search", "Tool Result"),
+                    ),
+                )
+            }
+        }
+
+        // 2. Autonomous on-device multi-engine search:
+        // Query Wikipedia, DuckDuckGo HTML, and Brave Search concurrently
         val wikiDeferred = async { queryWikipedia(cleanTopic) }
         val ddgDeferred = async { queryDuckDuckGo(cleanTopic) }
         val braveDeferred = async { queryBrave(cleanTopic) }
@@ -246,6 +353,12 @@ class AiChatEngine(
         val hasAnyData = wikiData != null || ddgData != null || braveData != null
 
         if (!hasAnyData) {
+            // Check if query matches current audiobook metadata
+            if (book != null) {
+                val bookMatch = handleBookFallbackSearch(query, book)
+                if (bookMatch != null) return@withContext bookMatch
+            }
+
             return@withContext AiChatMessage(
                 sender = ChatSender.Assistant,
                 text = "I searched across **Wikipedia**, **DuckDuckGo**, and **Brave Search** for **\"$query\"**, but no relevant information or definitions could be found.\n\n" +
@@ -254,7 +367,7 @@ class AiChatEngine(
             )
         }
 
-        // Run neural LLM forward pass if SmolLM ONNX model is available locally
+        // 3. Run neural LLM forward pass if SmolLM ONNX model is available locally
         var usedOnnx = false
         if (onnxEngine != null && modelManager?.isModelDownloaded() == true) {
             val prompt = buildSmolLmChatPrompt(query, wikiData, ddgData, braveData)
@@ -264,32 +377,104 @@ class AiChatEngine(
         synthesizeWebResults(query, cleanTopic, wikiData, ddgData, braveData, usedOnnx)
     }
 
-    private fun cleanSearchTopic(query: String): String {
+    private fun handleBookFallbackSearch(query: String, book: BookEntity): AiChatMessage? {
+        val lower = query.lowercase()
+        val titleMatch = lower.contains(book.title.lowercase()) || book.title.lowercase().contains(lower)
+        val authorMatch = book.author?.let { lower.contains(it.lowercase()) || it.lowercase().contains(lower) } ?: false
+        if (titleMatch || authorMatch || lower.contains("author") || lower.contains("synopsis") || lower.contains("plot")) {
+            val sb = StringBuilder()
+            sb.append("### 📖 About *${book.title}*\n\n")
+            if (!book.author.isNullOrBlank()) {
+                sb.append("**Author:** ${book.author}\n\n")
+            }
+            if (!book.genres.isNullOrBlank()) {
+                sb.append("**Genres:** ${book.genres}\n\n")
+            }
+            if (!book.description.isNullOrBlank()) {
+                sb.append("**Synopsis:**\n${book.description}\n\n")
+            }
+            return AiChatMessage(
+                sender = ChatSender.Assistant,
+                text = sb.toString().trim(),
+                sources = listOf(ChatSource(book.title, "Audiobook Metadata")),
+            )
+        }
+        return null
+    }
+
+    fun cleanSearchTopic(query: String): String {
         var s = query.trim()
+
+        // 1. Normalize fused words caused by rapid typing / voice typing without space
+        val fusedWordReplacements = listOf(
+            Regex("(?i)\\bdetailsabout\\b") to "details about",
+            Regex("(?i)\\bdetailsfor\\b") to "details for",
+            Regex("(?i)\\bdetailsof\\b") to "details of",
+            Regex("(?i)\\bdetailson\\b") to "details on",
+            Regex("(?i)\\btellme\\b") to "tell me",
+            Regex("(?i)\\bwhois\\b") to "who is",
+            Regex("(?i)\\bwhowas\\b") to "who was",
+            Regex("(?i)\\bwhatis\\b") to "what is",
+            Regex("(?i)\\bwhatwas\\b") to "what was",
+            Regex("(?i)\\bwhereis\\b") to "where is",
+            Regex("(?i)\\bmoreabout\\b") to "more about",
+            Regex("(?i)\\binfoabout\\b") to "info about",
+            Regex("(?i)\\binforabout\\b") to "info about",
+            Regex("(?i)\\binformationabout\\b") to "information about",
+            Regex("(?i)\\bnotesabout\\b") to "notes about",
+            Regex("(?i)\\bgiveme\\b") to "give me",
+            Regex("(?i)\\bexplainto\\b") to "explain to",
+            Regex("(?i)\\bcanu\\b") to "can you",
+            Regex("(?i)\\baboutthe\\b") to "about the",
+        )
+        for ((p, r) in fusedWordReplacements) {
+            s = s.replace(p, r)
+        }
+
+        // 2. Strip conversational inquiry prefixes
         val prefixes = listOf(
-            Regex("(?i)^define\\s+"),
-            Regex("(?i)^definition\\s+of\\s+"),
-            Regex("(?i)^meaning\\s+of\\s+"),
-            Regex("(?i)^what\\s+is\\s+(?:the\\s+)?"),
-            Regex("(?i)^what\\s+does\\s+(?:the\\s+word\\s+)?"),
-            Regex("(?i)^who\\s+(?:was|is)\\s+"),
+            Regex("(?i)^(?:can you\\s+)?(?:please\\s+)?(?:give\\s+(?:me\\s+)?(?:more\\s+)?)?(?:details|info|information|summary|overview|notes|facts|lore|background)\\s+(?:about|on|for|regarding|of)\\s+"),
+            Regex("(?i)^(?:can you\\s+)?(?:please\\s+)?tell\\s+(?:me\\s+)?(?:more\\s+)?(?:about|on)\\s+"),
+            Regex("(?i)^(?:can you\\s+)?(?:please\\s+)?(?:explain|describe|clarify|elaborate\\s+on|search\\s+(?:for|online\\s+for)?|look\\s+up|find\\s+out\\s+about)\\s+(?:the\\s+)?"),
+            Regex("(?i)^(?:who\\s+(?:is|was)|what\\s+(?:is|was|are|were)|where\\s+(?:is|was))\\s+(?:the\\s+)?"),
+            Regex("(?i)^(?:definition\\s+of|define|meaning\\s+of)\\s+"),
+            Regex("(?i)^give\\s+details\\s+(?:about|on|for|of)?\\s*"),
+            Regex("(?i)^details\\s+(?:about|on|for|of)?\\s*"),
+            Regex("(?i)^give\\s+(?:me\\s+)?(?:more\\s+)?(?:info|information)\\s+(?:about|on|for|of)?\\s*"),
             Regex("(?i)^tell\\s+me\\s+about\\s+"),
             Regex("(?i)^historical\\s+context\\s+of\\s+"),
             Regex("(?i)^history\\s+of\\s+"),
-            Regex("(?i)^search\\s+(?:online\\s+)?(?:for\\s+)?"),
-            Regex("(?i)^explain\\s+(?:the\\s+concept\\s+of\\s+|the\\s+word\\s+)?"),
         )
         for (p in prefixes) {
             s = s.replace(p, "").trim()
         }
-        s = s.replace(Regex("(?i)\\s+mean(?:ing)?$"), "").trim()
-        s = s.replace(Regex("(?i)\\s+in\\s+real\\s+life$"), "").trim()
-        return s.ifBlank { query }
+
+        // 3. Strip conversational suffixes
+        val suffixes = listOf(
+            Regex("(?i)\\s+(?:please|mean|meaning|in\\s+real\\s+life|in\\s+history|in\\s+mythology|in\\s+the\\s+book)$"),
+            Regex("(?i)\\s+details$"),
+        )
+        for (suffix in suffixes) {
+            s = s.replace(suffix, "").trim()
+        }
+
+        return s.ifBlank { query.trim() }
     }
 
-    private fun isCleanContentSnippet(snippet: String): Boolean {
+    fun extractCoreKeywords(text: String): String {
+        val stopWords = setOf(
+            "give", "details", "about", "tell", "me", "who", "what", "is", "was",
+            "are", "were", "the", "a", "an", "can", "you", "please", "in", "of",
+            "to", "for", "on", "with", "by", "from", "that", "this", "at", "and",
+            "or", "as", "it", "its", "find", "search", "show", "get", "more", "info", "information"
+        )
+        val tokens = text.lowercase().split(Regex("[^a-zA-Z0-9]+")).filter { it !in stopWords && it.length > 1 }
+        return tokens.joinToString(" ")
+    }
+
+    fun isCleanContentSnippet(snippet: String): Boolean {
         val s = snippet.trim()
-        if (s.length < 40) return false
+        if (s.length < 35) return false
         // Reject URL breadcrumb paths, domains, and search engine navigation
         if (s.contains("›") || s.contains(" > ") || s.contains("http://") || s.contains("https://") ||
             s.contains(".org") || s.contains(".com") || s.contains(".net") || s.contains(".edu") ||
@@ -298,13 +483,36 @@ class AiChatEngine(
         ) {
             return false
         }
-        if (s.count { it == ' ' } < 4) return false
+        if (s.count { it == ' ' } < 3) return false
         return true
     }
 
-    private fun queryWikipedia(topic: String): WikiSearchData? {
+    fun queryWikipedia(topic: String): WikiSearchData? {
+        val clean = topic.trim()
+        if (clean.isBlank()) return null
+
+        // 1. Primary search with cleaned topic
+        var data = executeWikipediaSearch(clean)
+
+        // 2. Query relaxation: search with core keywords if 0 hits
+        if (data == null) {
+            val core = extractCoreKeywords(clean)
+            if (core.isNotBlank() && !core.equals(clean, ignoreCase = true)) {
+                data = executeWikipediaSearch(core)
+            }
+        }
+
+        // 3. OpenSearch fuzzy/prefix lookup
+        if (data == null) {
+            data = queryWikipediaOpenSearch(clean)
+        }
+
+        return data
+    }
+
+    private fun executeWikipediaSearch(term: String): WikiSearchData? {
         return try {
-            val encoded = URLEncoder.encode(topic, "UTF-8")
+            val encoded = URLEncoder.encode(term, "UTF-8")
             val searchUrl = "https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=$encoded&format=json"
 
             val searchConn = (URL(searchUrl).openConnection() as HttpURLConnection).apply {
@@ -319,8 +527,17 @@ class AiChatEngine(
             val searchJson = JSONObject(searchConn.inputStream.bufferedReader().use { it.readText() })
             searchConn.disconnect()
 
-            val searchResults = searchJson.optJSONObject("query")?.optJSONArray("search") ?: return null
-            if (searchResults.length() == 0) return null
+            val queryObj = searchJson.optJSONObject("query")
+            val searchResults = queryObj?.optJSONArray("search")
+
+            // Check if hits exist
+            if (searchResults == null || searchResults.length() == 0) {
+                val suggestion = queryObj?.optJSONObject("searchinfo")?.optString("suggestion")
+                if (!suggestion.isNullOrBlank() && !suggestion.equals(term, ignoreCase = true)) {
+                    return executeWikipediaSearch(suggestion)
+                }
+                return null
+            }
 
             val topTitle = searchResults.getJSONObject(0).optString("title")
             if (topTitle.isBlank()) return null
@@ -332,144 +549,263 @@ class AiChatEngine(
                     .replace(Regex("<[^>]+>"), "")
                     .replace("&quot;", "\"")
                     .replace("&#039;", "'")
+                    .replace("&#39;", "'")
                     .replace("&amp;", "&")
+                    .replace("&lt;", "<")
+                    .replace("&gt;", ">")
                     .trim()
                 if (s.isNotBlank() && s.length > 30) {
                     snippets.add(s)
                 }
             }
 
-            val safeTitle = topTitle.replace(" ", "_")
-            var fullExtract: String? = null
-            var description: String? = null
-
-            // 1. Fetch REST summary
-            try {
-                val encodedSafe = URLEncoder.encode(safeTitle, "UTF-8")
-                val summaryUrl = "https://en.wikipedia.org/api/rest_v1/page/summary/$encodedSafe"
-                val sumConn = (URL(summaryUrl).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 6000
-                    readTimeout = 6000
-                    setRequestProperty("User-Agent", "FoxPlayer/1.1.0 (Android Audiobook Assistant)")
-                }
-                if (sumConn.responseCode == 200) {
-                    val sumJson = JSONObject(sumConn.inputStream.bufferedReader().use { it.readText() })
-                    fullExtract = sumJson.optString("extract").takeIf { it.isNotBlank() }
-                    description = sumJson.optString("description").takeIf { it.isNotBlank() }
-                }
-                sumConn.disconnect()
-            } catch (e: Exception) {
-                logE("Wikipedia REST summary error", e)
-            }
-
-            // 2. Fetch extensive multi-paragraph extract from Wikipedia Action API for rich, detailed knowledge
-            try {
-                val encodedSafe = URLEncoder.encode(safeTitle, "UTF-8")
-                val extractApiUrl = "https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&exchars=1800&titles=$encodedSafe&format=json"
-                val extConn = (URL(extractApiUrl).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 6000
-                    readTimeout = 6000
-                    setRequestProperty("User-Agent", "FoxPlayer/1.1.0 (Android Audiobook Assistant)")
-                }
-                if (extConn.responseCode == 200) {
-                    val extJson = JSONObject(extConn.inputStream.bufferedReader().use { it.readText() })
-                    val pages = extJson.optJSONObject("query")?.optJSONObject("pages")
-                    if (pages != null) {
-                        val firstKey = pages.keys().asSequence().firstOrNull()
-                        if (firstKey != null) {
-                            val pageObj = pages.optJSONObject(firstKey)
-                            val detailedText = pageObj?.optString("extract")?.trim()
-                            if (!detailedText.isNullOrBlank() && detailedText.length > (fullExtract?.length ?: 0)) {
-                                val cleanedText = detailedText
-                                    .replace(Regex("==+\\s*([^=]+)\\s*==+"), "\n\n**$1**\n")
-                                    .replace(Regex("\n{3,}"), "\n\n")
-                                    .trim()
-                                fullExtract = cleanedText
-                            }
-                        }
-                    }
-                }
-                extConn.disconnect()
-            } catch (e: Exception) {
-                logE("Wikipedia Action API extract error", e)
-            }
-
-            WikiSearchData(
-                title = topTitle,
-                description = description,
-                extract = fullExtract,
-                snippets = snippets,
-            )
+            fetchWikipediaArticleContent(topTitle, snippets)
         } catch (e: Exception) {
-            logE("Wikipedia query error", e)
+            logE("Wikipedia search error for '$term'", e)
             null
         }
     }
 
-    private fun queryDuckDuckGo(topic: String): DdgSearchData? {
+    private fun fetchWikipediaArticleContent(topTitle: String, snippets: List<String>): WikiSearchData {
+        var fullExtract: String? = null
+        var description: String? = null
+
+        // 1. Fetch REST summary
+        try {
+            val safeTitle = topTitle.replace(" ", "_")
+            val encodedSafe = URLEncoder.encode(safeTitle, "UTF-8")
+            val summaryUrl = "https://en.wikipedia.org/api/rest_v1/page/summary/$encodedSafe"
+            val sumConn = (URL(summaryUrl).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 6000
+                readTimeout = 6000
+                instanceFollowRedirects = true
+                setRequestProperty("User-Agent", "FoxPlayer/1.1.0 (Android Audiobook Assistant)")
+            }
+            if (sumConn.responseCode == 200) {
+                val sumJson = JSONObject(sumConn.inputStream.bufferedReader().use { it.readText() })
+                fullExtract = sumJson.optString("extract").takeIf { it.isNotBlank() }
+                description = sumJson.optString("description").takeIf { it.isNotBlank() }
+            }
+            sumConn.disconnect()
+        } catch (e: Exception) {
+            logE("Wikipedia REST summary error", e)
+        }
+
+        // 2. Fetch extensive multi-paragraph extract with redirects=1
+        try {
+            val safeTitle = topTitle.replace(" ", "_")
+            val encodedSafe = URLEncoder.encode(safeTitle, "UTF-8")
+            val extractApiUrl = "https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&exchars=2500&redirects=1&titles=$encodedSafe&format=json"
+            val extConn = (URL(extractApiUrl).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 6000
+                readTimeout = 6000
+                setRequestProperty("User-Agent", "FoxPlayer/1.1.0 (Android Audiobook Assistant)")
+            }
+            if (extConn.responseCode == 200) {
+                val extJson = JSONObject(extConn.inputStream.bufferedReader().use { it.readText() })
+                val pages = extJson.optJSONObject("query")?.optJSONObject("pages")
+                if (pages != null) {
+                    val firstKey = pages.keys().asSequence().firstOrNull()
+                    if (firstKey != null) {
+                        val pageObj = pages.optJSONObject(firstKey)
+                        val detailedText = pageObj?.optString("extract")?.trim()
+                        if (!detailedText.isNullOrBlank() && detailedText.length > (fullExtract?.length ?: 0)) {
+                            val cleanedText = detailedText
+                                .replace(Regex("==+\\s*([^=]+)\\s*==+"), "\n\n**$1**\n")
+                                .replace(Regex("\n{3,}"), "\n\n")
+                                .trim()
+                            fullExtract = cleanedText
+                        }
+                    }
+                }
+            }
+            extConn.disconnect()
+        } catch (e: Exception) {
+            logE("Wikipedia Action API extract error", e)
+        }
+
+        return WikiSearchData(
+            title = topTitle,
+            description = description,
+            extract = fullExtract,
+            snippets = snippets,
+        )
+    }
+
+    private fun queryWikipediaOpenSearch(topic: String): WikiSearchData? {
         return try {
             val encoded = URLEncoder.encode(topic, "UTF-8")
-            val urlString = "https://api.duckduckgo.com/?q=$encoded&format=json&no_html=1&skip_disambig=1"
-            val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
+            val openSearchUrl = "https://en.wikipedia.org/w/api.php?action=opensearch&search=$encoded&limit=3&namespace=0&format=json"
+            val conn = (URL(openSearchUrl).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 5000
                 readTimeout = 5000
-                setRequestProperty("User-Agent", "FoxPlayer/1.1.0")
+                setRequestProperty("User-Agent", "FoxPlayer/1.1.0 (Android Audiobook Assistant)")
             }
             if (conn.responseCode != 200) {
                 conn.disconnect()
                 return null
             }
-            val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+            val text = conn.inputStream.bufferedReader().use { it.readText() }
             conn.disconnect()
 
-            val heading = json.optString("Heading").takeIf { it.isNotBlank() }
-            val definition = json.optString("Definition").takeIf { it.isNotBlank() }
-            val abstractText = json.optString("AbstractText").takeIf { it.isNotBlank() }
-            val answer = json.optString("Answer").takeIf { it.isNotBlank() }
+            val jsonArray = org.json.JSONArray(text)
+            if (jsonArray.length() < 2) return null
+            val titlesArray = jsonArray.optJSONArray(1) ?: return null
+            if (titlesArray.length() == 0) return null
+            val matchedTitle = titlesArray.optString(0)
+            if (matchedTitle.isBlank()) return null
 
-            val related = mutableListOf<String>()
-            val relArray = json.optJSONArray("RelatedTopics")
-            if (relArray != null) {
-                for (i in 0 until relArray.length()) {
-                    val item = relArray.opt(i)
-                    if (item is JSONObject) {
-                        val t = item.optString("Text")
-                        if (t.isNotBlank() && t.length > 25) {
-                            related.add(t)
-                        }
-                        val subTopics = item.optJSONArray("Topics")
-                        if (subTopics != null) {
-                            for (j in 0 until subTopics.length()) {
-                                val subItem = subTopics.optJSONObject(j) ?: continue
-                                val st = subItem.optString("Text")
-                                if (st.isNotBlank() && st.length > 25) {
-                                    related.add(st)
-                                }
-                            }
-                        }
-                    }
-                    if (related.size >= 4) break
-                }
-            }
-
-            if (heading.isNullOrBlank() && definition.isNullOrBlank() && abstractText.isNullOrBlank() && answer.isNullOrBlank() && related.isEmpty()) {
-                return null
-            }
-
-            DdgSearchData(
-                heading = heading,
-                definition = definition,
-                abstractText = abstractText,
-                answer = answer,
-                relatedTopics = related,
-            )
+            fetchWikipediaArticleContent(matchedTitle, emptyList())
         } catch (e: Exception) {
-            logE("DuckDuckGo API error", e)
+            logE("Wikipedia OpenSearch error", e)
             null
         }
     }
 
-    private fun queryBrave(topic: String): BraveSearchData? {
+    fun queryDuckDuckGo(topic: String): DdgSearchData? {
+        val clean = topic.trim()
+        if (clean.isBlank()) return null
+        return try {
+            val encodedQuery = "q=" + URLEncoder.encode(clean, "UTF-8")
+            val url = URL("https://html.duckduckgo.com/html/")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                connectTimeout = 6000
+                readTimeout = 6000
+                instanceFollowRedirects = true
+                setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            }
+            conn.outputStream.use { os ->
+                os.write(encodedQuery.toByteArray(Charsets.UTF_8))
+                os.flush()
+            }
+            if (conn.responseCode != 200) {
+                conn.disconnect()
+                return queryDuckDuckGoLiteFallback(clean)
+            }
+            val html = conn.inputStream.bufferedReader().use { it.readText() }
+            conn.disconnect()
+
+            parseDuckDuckGoHtml(html, clean) ?: queryDuckDuckGoLiteFallback(clean)
+        } catch (e: Exception) {
+            logE("DuckDuckGo HTML query error for '$topic'", e)
+            queryDuckDuckGoLiteFallback(clean)
+        }
+    }
+
+    private fun parseDuckDuckGoHtml(html: String, query: String): DdgSearchData? {
+        val snippetRegex = Regex("class=\"result__snippet\"[^>]*>(.*?)</a>", RegexOption.DOT_MATCHES_ALL)
+        val titleRegex = Regex("class=\"result__a\"[^>]*>(.*?)</a>", RegexOption.DOT_MATCHES_ALL)
+
+        val snippetMatches = snippetRegex.findAll(html).take(6).toList()
+        val titleMatches = titleRegex.findAll(html).take(6).toList()
+
+        if (snippetMatches.isEmpty()) return null
+
+        val snippets = mutableListOf<String>()
+        val webResults = mutableListOf<DdgResultItem>()
+
+        for (i in snippetMatches.indices) {
+            val rawSnippet = snippetMatches[i].groupValues[1]
+            val cleanSnippet = rawSnippet
+                .replace(Regex("<[^>]+>"), "")
+                .replace("&quot;", "\"")
+                .replace("&#x27;", "'")
+                .replace("&#39;", "'")
+                .replace("&amp;", "&")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+
+            val rawTitle = if (i < titleMatches.size) titleMatches[i].groupValues[1] else ""
+            val cleanTitle = rawTitle
+                .replace(Regex("<[^>]+>"), "")
+                .replace("&quot;", "\"")
+                .replace("&#x27;", "'")
+                .replace("&#39;", "'")
+                .replace("&amp;", "&")
+                .trim()
+
+            if (cleanSnippet.length > 35 && isCleanContentSnippet(cleanSnippet)) {
+                val healed = OnnxBookMetadataEngine.sanitizeCompleteSentences(cleanSnippet)
+                if (healed.isNotBlank()) {
+                    snippets.add(healed)
+                    webResults.add(DdgResultItem(title = cleanTitle.ifBlank { query }, snippet = healed))
+                }
+            }
+        }
+
+        if (snippets.isEmpty()) return null
+
+        val firstSnippet = snippets.first()
+        val remaining = snippets.drop(1).take(4)
+        val topTitle = webResults.firstOrNull()?.title
+
+        return DdgSearchData(
+            heading = topTitle,
+            definition = null,
+            abstractText = firstSnippet,
+            answer = null,
+            relatedTopics = remaining,
+            webResults = webResults,
+        )
+    }
+
+    private fun queryDuckDuckGoLiteFallback(topic: String): DdgSearchData? {
+        return try {
+            val encodedQuery = "q=" + URLEncoder.encode(topic, "UTF-8")
+            val url = URL("https://lite.duckduckgo.com/lite/")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                connectTimeout = 6000
+                readTimeout = 6000
+                instanceFollowRedirects = true
+                setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            }
+            conn.outputStream.use { os ->
+                os.write(encodedQuery.toByteArray(Charsets.UTF_8))
+                os.flush()
+            }
+            if (conn.responseCode != 200) {
+                conn.disconnect()
+                return null
+            }
+            val html = conn.inputStream.bufferedReader().use { it.readText() }
+            conn.disconnect()
+
+            val snippetRegex = Regex("class=\"result-snippet\"[^>]*>(.*?)</td>", RegexOption.DOT_MATCHES_ALL)
+            val matches = snippetRegex.findAll(html).take(5).toList()
+            val snippets = matches.mapNotNull { m ->
+                val s = m.groupValues[1]
+                    .replace(Regex("<[^>]+>"), " ")
+                    .replace("&quot;", "\"")
+                    .replace("&#x27;", "'")
+                    .replace("&amp;", "&")
+                    .trim()
+                if (s.length > 35 && isCleanContentSnippet(s)) OnnxBookMetadataEngine.sanitizeCompleteSentences(s) else null
+            }
+            if (snippets.isEmpty()) return null
+
+            DdgSearchData(
+                heading = topic,
+                definition = null,
+                abstractText = snippets.first(),
+                answer = null,
+                relatedTopics = snippets.drop(1),
+            )
+        } catch (e: Exception) {
+            logE("DuckDuckGo Lite fallback error", e)
+            null
+        }
+    }
+
+    fun queryBrave(topic: String): BraveSearchData? {
         return try {
             val encoded = URLEncoder.encode(topic, "UTF-8")
             val urlString = "https://search.brave.com/search?q=$encoded"
@@ -488,7 +824,7 @@ class AiChatEngine(
                 val sb = StringBuilder()
                 val buf = CharArray(4096)
                 var total = 0
-                while (total < 100000) {
+                while (total < 120000) {
                     val n = reader.read(buf)
                     if (n == -1) break
                     sb.append(buf, 0, n)
@@ -500,11 +836,10 @@ class AiChatEngine(
 
             val snippets = mutableListOf<String>()
 
-            // Extract from result-body blocks in Brave HTML
-            val bodyRegex = Regex("(?s)<div class=\"result-body[^>]*>(.*?)</div>\\s*</div>")
-            val bodyMatches = bodyRegex.findAll(html).take(4).toList()
-            for (m in bodyMatches) {
-                val raw = m.groups[1]?.value.orEmpty()
+            // 1. Match content divs from modern Brave HTML
+            val contentRegex = Regex("class=\"(?:content desktop-default-regular|generic-snippet|snippet-description)[^\"]*\"[^>]*>(.*?)</div>", RegexOption.DOT_MATCHES_ALL)
+            for (m in contentRegex.findAll(html).take(6)) {
+                val raw = m.groupValues[1]
                 val clean = raw.replace(Regex("<[^>]+>"), " ")
                     .replace("&quot;", "\"")
                     .replace("&#x27;", "'")
@@ -512,9 +847,9 @@ class AiChatEngine(
                     .replace(Regex("\\s+"), " ")
                     .trim()
                 if (clean.length > 40 && !clean.startsWith("Search the Web", ignoreCase = true)) {
-                    val trimmedSnippet = clean.replace(Regex("^\\d+\\s+[A-Za-z]+\\s+\\d{4}\\s*-\\s*"), "")
-                    if (isCleanContentSnippet(trimmedSnippet)) {
-                        val healed = OnnxBookMetadataEngine.sanitizeCompleteSentences(trimmedSnippet)
+                    val trimmed = clean.replace(Regex("^\\d+\\s+[A-Za-z]+\\s+\\d{4}\\s*-\\s*"), "")
+                    if (isCleanContentSnippet(trimmed)) {
+                        val healed = OnnxBookMetadataEngine.sanitizeCompleteSentences(trimmed)
                         if (healed.isNotBlank() && healed.length > 35) {
                             snippets.add(healed)
                         }
@@ -522,12 +857,11 @@ class AiChatEngine(
                 }
             }
 
-            // Fallback to quoted sentences if result-body was not parsed
+            // 2. Fallback to quotes if content regex was empty
             if (snippets.isEmpty()) {
                 val quoteRegex = Regex("\"([A-Z][^\"\\\\]{45,250}\\.)\"")
-                val quoteMatches = quoteRegex.findAll(html).take(3).toList()
-                for (m in quoteMatches) {
-                    val q = m.groups[1]?.value.orEmpty()
+                for (m in quoteRegex.findAll(html).take(3)) {
+                    val q = m.groupValues[1]
                     if (!q.contains("Brave") && !q.contains("Search the Web") && isCleanContentSnippet(q)) {
                         val healed = OnnxBookMetadataEngine.sanitizeCompleteSentences(q)
                         if (healed.isNotBlank() && healed.length > 35) {
@@ -538,7 +872,7 @@ class AiChatEngine(
             }
 
             if (snippets.isEmpty()) return null
-            BraveSearchData(snippets = snippets.distinct().take(3))
+            BraveSearchData(snippets = snippets.distinct().take(4))
         } catch (e: Exception) {
             logE("Brave Search query error", e)
             null
@@ -604,6 +938,14 @@ class AiChatEngine(
         val keyPoints = mutableListOf<String>()
         val mainTextLower = (mainExtract ?: "").lowercase()
 
+        // From DuckDuckGo web results (e.g. Britannica, GreekMythology, etc.)
+        ddg?.webResults?.drop(1)?.forEach { item ->
+            val cleaned = OnnxBookMetadataEngine.sanitizeCompleteSentences(item.snippet)
+            if (cleaned.length > 35 && !mainTextLower.contains(cleaned.take(35).lowercase()) && keyPoints.none { it.take(30).equals(cleaned.take(30), ignoreCase = true) }) {
+                keyPoints.add(cleaned)
+            }
+        }
+
         // From Brave Search snippets
         brave?.snippets?.forEach { snippet ->
             if (isCleanContentSnippet(snippet)) {
@@ -636,7 +978,7 @@ class AiChatEngine(
 
         if (keyPoints.isNotEmpty()) {
             sb.append("**Key Insights & Lore:**\n")
-            keyPoints.take(3).forEach { point ->
+            keyPoints.take(4).forEach { point ->
                 sb.append("• ").append(point).append("\n")
             }
             sb.append("\n")
@@ -647,8 +989,9 @@ class AiChatEngine(
         if (wiki != null && (!wiki.extract.isNullOrBlank() || wiki.snippets.isNotEmpty())) {
             sources.add(ChatSource(wiki.title, "Wikipedia"))
         }
-        if (ddg != null && (!ddg.abstractText.isNullOrBlank() || !ddg.definition.isNullOrBlank() || ddg.relatedTopics.isNotEmpty())) {
-            sources.add(ChatSource(ddg.heading ?: "Knowledge", "DuckDuckGo"))
+        if (ddg != null && (!ddg.abstractText.isNullOrBlank() || ddg.webResults.isNotEmpty() || ddg.relatedTopics.isNotEmpty())) {
+            val count = if (ddg.webResults.isNotEmpty()) "${ddg.webResults.size} Web Results" else (ddg.heading ?: "DuckDuckGo")
+            sources.add(ChatSource(count, "DuckDuckGo"))
         }
         if (brave != null && brave.snippets.isNotEmpty()) {
             sources.add(ChatSource("${brave.snippets.size} Snippets", "Brave Search"))

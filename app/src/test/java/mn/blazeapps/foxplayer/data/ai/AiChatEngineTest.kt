@@ -207,4 +207,62 @@ class AiChatEngineTest {
         // Author name should be excluded
         assertFalse(bestsellers.contains("Brandon Sanderson"))
     }
+
+    @Test
+    fun testCleanSearchTopicFusedWordsAndPrefixes() {
+        assertEquals("zeus greek god", aiChatEngine.cleanSearchTopic("give detailsabout zeus greek god"))
+        assertEquals("zeus", aiChatEngine.cleanSearchTopic("detailsabout zeus"))
+        assertEquals("zeus greek god", aiChatEngine.cleanSearchTopic("give details about zeus greek god"))
+        assertEquals("apollo", aiChatEngine.cleanSearchTopic("tellme about apollo"))
+        assertEquals("zeus", aiChatEngine.cleanSearchTopic("who is zeus"))
+        assertEquals("poseidon", aiChatEngine.cleanSearchTopic("can you please give details about poseidon"))
+        assertEquals("hades", aiChatEngine.cleanSearchTopic("give me more info on hades"))
+    }
+
+    @Test
+    fun testProcessQueryZeusGreekGod() = runBlocking {
+        val result = aiChatEngine.processQuery(
+            query = "give detailsabout zeus greek god",
+            book = testBook,
+            chapters = testChapters,
+            bookmarks = emptyList(),
+        )
+
+        assertEquals(ChatSender.Assistant, result.sender)
+        assertTrue(result.text.isNotBlank())
+        assertTrue("Expected response to mention Zeus, got: ${result.text}", result.text.contains("Zeus", ignoreCase = true))
+        assertTrue(result.sources.isNotEmpty())
+        assertTrue(
+            result.sources.any { it.type == "Wikipedia" || it.type == "DuckDuckGo" || it.type == "Brave Search" }
+        )
+    }
+
+    @Test
+    fun testBookMetadataAuthorQuery() = runBlocking {
+        val result = aiChatEngine.processQuery(
+            query = "who is the author",
+            book = testBook,
+            chapters = testChapters,
+            bookmarks = emptyList(),
+        )
+
+        assertEquals(ChatSender.Assistant, result.sender)
+        assertTrue(result.text.contains("Mark Torr"))
+        assertEquals("Audiobook Metadata", result.sources[0].type)
+    }
+
+    @Test
+    fun testBookMetadataChaptersQuery() = runBlocking {
+        val result = aiChatEngine.processQuery(
+            query = "how many chapters are there",
+            book = testBook,
+            chapters = testChapters,
+            bookmarks = emptyList(),
+        )
+
+        assertEquals(ChatSender.Assistant, result.sender)
+        assertTrue(result.text.contains("2 chapters"))
+        assertEquals("Audiobook Metadata", result.sources[0].type)
+    }
 }
+
