@@ -15,6 +15,7 @@ import kotlinx.coroutines.withContext
 import mn.blazeapps.foxplayer.data.ai.AiChatEngine
 import mn.blazeapps.foxplayer.data.ai.AiChatMessage
 import mn.blazeapps.foxplayer.data.ai.BookSeriesAndAuthorInfo
+import mn.blazeapps.foxplayer.data.ai.LocalChatPreferences
 import mn.blazeapps.foxplayer.data.onnx.EnrichedBookMetadata
 import mn.blazeapps.foxplayer.data.onnx.OnnxBookMetadataEngine
 import mn.blazeapps.foxplayer.data.onnx.OnnxModelManager
@@ -29,7 +30,12 @@ class AudiobookRepository(
     val onnxModelManager: OnnxModelManager = OnnxModelManager(context),
     val onnxEngine: OnnxBookMetadataEngine = OnnxBookMetadataEngine(onnxModelManager),
     val webSearchResolver: WebBookSearchResolver = WebBookSearchResolver(),
-    val aiChatEngine: AiChatEngine = AiChatEngine(onnxModelManager, onnxEngine),
+    val localChatPreferences: LocalChatPreferences = LocalChatPreferences(context),
+    val aiChatEngine: AiChatEngine = AiChatEngine(
+        modelManager = onnxModelManager,
+        onnxEngine = onnxEngine,
+        localChatPreferences = localChatPreferences,
+    ),
 ) {
     private val books = db.bookDao()
     private val chapters = db.chapterDao()

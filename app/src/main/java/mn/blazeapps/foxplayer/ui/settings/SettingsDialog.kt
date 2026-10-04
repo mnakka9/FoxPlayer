@@ -22,6 +22,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.launch
+import mn.blazeapps.foxplayer.data.ai.LocalChatEngineMode
+import mn.blazeapps.foxplayer.data.ai.LocalChatPreferences
+import mn.blazeapps.foxplayer.data.ai.LocalLlmClient
 import mn.blazeapps.foxplayer.data.onnx.ModelDownloadState
 import mn.blazeapps.foxplayer.ui.theme.*
 import java.util.Locale
@@ -34,6 +38,13 @@ fun SettingsDialog(
     freeSpaceBytes: Long,
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
+    localChatEngineMode: LocalChatEngineMode = LocalChatEngineMode.FAST_LOCAL,
+    onLocalChatEngineModeChange: (LocalChatEngineMode) -> Unit = {},
+    foundryEndpoint: String = LocalChatPreferences.DEFAULT_ENDPOINT,
+    onFoundryEndpointChange: (String) -> Unit = {},
+    foundryModel: String = LocalChatPreferences.DEFAULT_MODEL,
+    onFoundryModelChange: (String) -> Unit = {},
+    onTestFoundryConnection: (suspend () -> LocalLlmClient.ConnectionStatus)? = null,
     isGeminiChatEnabled: Boolean = false,
     onGeminiChatEnabledChange: (Boolean) -> Unit = {},
     geminiApiKey: String = "",
@@ -46,6 +57,10 @@ fun SettingsDialog(
     onDismiss: () -> Unit,
 ) {
     val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val coroutineScope = rememberCoroutineScope()
+    var isTestingConnection by remember { mutableStateOf(false) }
+    var connectionStatusText by remember { mutableStateOf<String?>(null) }
+    var isConnectionSuccess by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     Dialog(
@@ -131,319 +146,594 @@ fun SettingsDialog(
                         .weight(1f),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    // Section 1: On-Device AI Model
+                    // Section 1: Local AI Companion Engine
                     item {
                         SectionHeader(
-                            title = "On-Device AI Engine",
+                            title = "Local AI Companion Engine",
                             icon = Icons.Default.AutoAwesome,
                             iconTint = ColorOrangeLight,
                             isDark = isDark,
                         )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Select which engine drives on-device local chat. (Google Gemini Cloud AI is configured independently below).",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 2.dp),
+                        )
                         Spacer(Modifier.height(8.dp))
 
-                        Card(
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant,
-                            ),
-                            border = BorderStroke(
-                                1.dp,
-                                if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant,
-                            ),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            // Engine Option 1: Fast Local Agent
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant,
+                                ),
+                                border = BorderStroke(
+                                    if (localChatEngineMode == LocalChatEngineMode.FAST_LOCAL) 2.dp else 1.dp,
+                                    if (localChatEngineMode == LocalChatEngineMode.FAST_LOCAL) ColorOrange else if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant,
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onLocalChatEngineModeChange(LocalChatEngineMode.FAST_LOCAL) },
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    Text(
-                                        "SmolLM2-360M-Instruct",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(999.dp))
-                                            .background(if (isDark) ColorOrangeDim else MaterialTheme.colorScheme.primaryContainer)
-                                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
                                     ) {
-                                        Text(
-                                            "ONNX Q4F16",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Bolt,
+                                                contentDescription = null,
+                                                tint = ColorOrangeLight,
+                                                modifier = Modifier.size(20.dp),
+                                            )
+                                            Column {
+                                                Text(
+                                                    "Fast Local Agent",
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                                                )
+                                                Text(
+                                                    "Default · Instant search & lore",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                        }
+                                        RadioButton(
+                                            selected = localChatEngineMode == LocalChatEngineMode.FAST_LOCAL,
+                                            onClick = { onLocalChatEngineModeChange(LocalChatEngineMode.FAST_LOCAL) },
+                                            colors = RadioButtonDefaults.colors(
+                                                selectedColor = ColorOrange,
+                                                unselectedColor = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                                            ),
                                         )
                                     }
-                                }
 
-                                Text(
-                                    "State-of-the-art 360M parameter neural model fine-tuned for summarization and reasoning. Runs 100% locally on your device for offline book metadata enrichment and companion chat without sending data to servers.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                    Text(
+                                        "Instant multi-engine search across Wikipedia, DuckDuckGo, and Brave Search with neural text formatting. Zero background RAM, no setup needed.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
 
-                                // Specs row
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                ) {
-                                    SpecChip(label = "Model Size", value = "~272 MB", isDark = isDark)
-                                    SpecChip(label = "Required Space", value = "~350 MB", isDark = isDark)
-                                    SpecChip(label = "Privacy", value = "100% On-Device", isDark = isDark)
-                                }
+                                    if (localChatEngineMode == LocalChatEngineMode.FAST_LOCAL) {
+                                        HorizontalDivider(
+                                            color = if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                            modifier = Modifier.padding(vertical = 4.dp),
+                                        )
 
-                                HorizontalDivider(
-                                    color = if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                    modifier = Modifier.padding(vertical = 2.dp),
-                                )
-
-                                // Dynamic Model State UI
-                                when (modelDownloadState) {
-                                    is ModelDownloadState.Downloading -> {
-                                        Column(
-                                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                                        Row(
                                             modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween,
                                         ) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically,
-                                            ) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                                ) {
-                                                    CircularProgressIndicator(
-                                                        modifier = Modifier.size(14.dp),
-                                                        strokeWidth = 2.dp,
-                                                        color = ColorOrange,
-                                                    )
-                                                    Text(
-                                                        "Downloading SmolLM2-360M ONNX...",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
-                                                    )
-                                                }
-                                                Text(
-                                                    "${(modelDownloadState.progress * 100).toInt()}%",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = ColorOrange,
-                                                )
-                                            }
-
-                                            LinearProgressIndicator(
-                                                progress = { modelDownloadState.progress },
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .height(8.dp)
-                                                    .clip(RoundedCornerShape(4.dp)),
-                                                color = ColorOrange,
-                                                trackColor = if (isDark) Color(0x33F97316) else MaterialTheme.colorScheme.surfaceContainerHighest,
-                                            )
-
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                            ) {
-                                                Text(
-                                                    "${modelDownloadState.bytesDownloaded / (1024 * 1024)} MB of ${modelDownloadState.totalBytes / (1024 * 1024)} MB",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
-                                                )
-                                                Text(
-                                                    "Keep app active",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    is ModelDownloadState.Error -> {
-                                        Column(
-                                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                                            modifier = Modifier.fillMaxWidth(),
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.ErrorOutline,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.error,
-                                                    modifier = Modifier.size(16.dp),
-                                                )
-                                                Text(
-                                                    "Download Failed",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.error,
-                                                )
-                                            }
                                             Text(
-                                                modelDownloadState.message,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.9f),
+                                                "SmolLM2-360M-Instruct",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
                                             )
-                                            Button(
-                                                onClick = onDownloadModel,
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = ColorOrange,
-                                                    contentColor = Color.White,
-                                                ),
-                                                shape = RoundedCornerShape(10.dp),
-                                                modifier = Modifier.align(Alignment.End),
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(999.dp))
+                                                    .background(if (isDark) ColorOrangeDim else MaterialTheme.colorScheme.primaryContainer)
+                                                    .padding(horizontal = 8.dp, vertical = 2.dp),
                                             ) {
-                                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                Spacer(Modifier.width(6.dp))
-                                                Text("Retry Download")
+                                                Text(
+                                                    "ONNX Q4F16",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                                                )
                                             }
                                         }
-                                    }
 
-                                    is ModelDownloadState.Ready -> {
-                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                            ) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        // Specs row
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        ) {
+                                            SpecChip(label = "Model Size", value = "~272 MB", isDark = isDark)
+                                            SpecChip(label = "Required Space", value = "~350 MB", isDark = isDark)
+                                            SpecChip(label = "Privacy", value = "100% On-Device", isDark = isDark)
+                                        }
+
+                                        // Dynamic Model State UI (SmolLM2)
+                                        when (modelDownloadState) {
+                                            is ModelDownloadState.Downloading -> {
+                                                Column(
+                                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                    modifier = Modifier.fillMaxWidth(),
                                                 ) {
-                                                    Icon(
-                                                        Icons.Default.CheckCircle,
-                                                        contentDescription = null,
-                                                        tint = ColorOrangeLight,
-                                                        modifier = Modifier.size(18.dp),
-                                                    )
-                                                    Column {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                        ) {
+                                                            CircularProgressIndicator(
+                                                                modifier = Modifier.size(14.dp),
+                                                                strokeWidth = 2.dp,
+                                                                color = ColorOrange,
+                                                            )
+                                                            Text(
+                                                                "Downloading SmolLM2-360M ONNX...",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                                                            )
+                                                        }
                                                         Text(
-                                                            "Installed & Ready",
+                                                            "${(modelDownloadState.progress * 100).toInt()}%",
                                                             style = MaterialTheme.typography.labelSmall,
                                                             fontWeight = FontWeight.Bold,
-                                                            color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
-                                                        )
-                                                        val sizeMb = if (modelSizeBytes > 0) "${modelSizeBytes / (1024 * 1024)} MB" else "~272 MB"
-                                                        Text(
-                                                            "Storage used: $sizeMb",
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                                                            color = ColorOrange,
                                                         )
                                                     }
-                                                }
 
-                                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                    TextButton(
-                                                        onClick = { showDeleteConfirm = true },
-                                                        colors = ButtonDefaults.textButtonColors(
-                                                            contentColor = MaterialTheme.colorScheme.error,
-                                                        ),
+                                                    LinearProgressIndicator(
+                                                        progress = { modelDownloadState.progress },
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .height(8.dp)
+                                                            .clip(RoundedCornerShape(4.dp)),
+                                                        color = ColorOrange,
+                                                        trackColor = if (isDark) Color(0x33F97316) else MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                    )
+
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
                                                     ) {
-                                                        Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                        Spacer(Modifier.width(4.dp))
-                                                        Text("Delete")
-                                                    }
-                                                    TextButton(onClick = onDownloadModel) {
-                                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                        Spacer(Modifier.width(4.dp))
-                                                        Text("Re-fetch")
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    else -> {
-                                        // Idle / Not Downloaded
-                                        if (isModelDownloaded) {
-                                            // Model file exists on disk
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                            ) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                                ) {
-                                                    Icon(
-                                                        Icons.Default.CheckCircle,
-                                                        contentDescription = null,
-                                                        tint = ColorOrangeLight,
-                                                        modifier = Modifier.size(18.dp),
-                                                    )
-                                                    Text(
-                                                        "Model Installed & Active",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
-                                                    )
-                                                }
-                                                TextButton(
-                                                    onClick = { showDeleteConfirm = true },
-                                                    colors = ButtonDefaults.textButtonColors(
-                                                        contentColor = MaterialTheme.colorScheme.error,
-                                                    ),
-                                                ) {
-                                                    Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                    Spacer(Modifier.width(4.dp))
-                                                    Text("Delete")
-                                                }
-                                            }
-                                        } else {
-                                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                ) {
-                                                    Column {
                                                         Text(
-                                                            "Status: Not Installed",
+                                                            "${modelDownloadState.bytesDownloaded / (1024 * 1024)} MB of ${modelDownloadState.totalBytes / (1024 * 1024)} MB",
                                                             style = MaterialTheme.typography.labelSmall,
-                                                            fontWeight = FontWeight.SemiBold,
-                                                            color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
                                                         )
-                                                        val freeGb = String.format(Locale.US, "%.1f", freeSpaceBytes / (1024.0 * 1024 * 1024))
                                                         Text(
-                                                            "Device storage: $freeGb GB free",
+                                                            "Keep app active",
                                                             style = MaterialTheme.typography.labelSmall,
                                                             color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
                                                         )
                                                     }
+                                                }
+                                            }
 
+                                            is ModelDownloadState.Error -> {
+                                                Column(
+                                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Default.ErrorOutline,
+                                                            contentDescription = null,
+                                                            tint = MaterialTheme.colorScheme.error,
+                                                            modifier = Modifier.size(16.dp),
+                                                        )
+                                                        Text(
+                                                            "Download Failed",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.error,
+                                                        )
+                                                    }
+                                                    Text(
+                                                        modelDownloadState.message,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.9f),
+                                                    )
                                                     Button(
                                                         onClick = onDownloadModel,
                                                         colors = ButtonDefaults.buttonColors(
                                                             containerColor = ColorOrange,
                                                             contentColor = Color.White,
                                                         ),
-                                                        shape = RoundedCornerShape(12.dp),
+                                                        shape = RoundedCornerShape(10.dp),
+                                                        modifier = Modifier.align(Alignment.End),
                                                     ) {
-                                                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                                         Spacer(Modifier.width(6.dp))
-                                                        Text("Download", fontWeight = FontWeight.Bold)
+                                                        Text("Retry Download")
                                                     }
                                                 }
+                                            }
 
+                                            is ModelDownloadState.Ready -> {
+                                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                        ) {
+                                                            Icon(
+                                                                Icons.Default.CheckCircle,
+                                                                contentDescription = null,
+                                                                tint = ColorOrangeLight,
+                                                                modifier = Modifier.size(18.dp),
+                                                            )
+                                                            Column {
+                                                                Text(
+                                                                    "Installed & Ready",
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                                                                )
+                                                                val sizeMb = if (modelSizeBytes > 0) "${modelSizeBytes / (1024 * 1024)} MB" else "~272 MB"
+                                                                Text(
+                                                                    "Storage used: $sizeMb",
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                                                                )
+                                                            }
+                                                        }
+
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            TextButton(
+                                                                onClick = { showDeleteConfirm = true },
+                                                                colors = ButtonDefaults.textButtonColors(
+                                                                    contentColor = MaterialTheme.colorScheme.error,
+                                                                ),
+                                                            ) {
+                                                                Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                                Spacer(Modifier.width(4.dp))
+                                                                Text("Delete")
+                                                            }
+                                                            TextButton(onClick = onDownloadModel) {
+                                                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                                Spacer(Modifier.width(4.dp))
+                                                                Text("Re-fetch")
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            else -> {
+                                                if (isModelDownloaded) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                        ) {
+                                                            Icon(
+                                                                Icons.Default.CheckCircle,
+                                                                contentDescription = null,
+                                                                tint = ColorOrangeLight,
+                                                                modifier = Modifier.size(18.dp),
+                                                            )
+                                                            Text(
+                                                                "Model Installed & Active",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                                                            )
+                                                        }
+                                                        TextButton(
+                                                            onClick = { showDeleteConfirm = true },
+                                                            colors = ButtonDefaults.textButtonColors(
+                                                                contentColor = MaterialTheme.colorScheme.error,
+                                                            ),
+                                                        ) {
+                                                            Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                            Spacer(Modifier.width(4.dp))
+                                                            Text("Delete")
+                                                        }
+                                                    }
+                                                } else {
+                                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                        ) {
+                                                            Column {
+                                                                Text(
+                                                                    "Status: Not Installed (Optional)",
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    fontWeight = FontWeight.SemiBold,
+                                                                    color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                )
+                                                                val freeGb = String.format(Locale.US, "%.1f", freeSpaceBytes / (1024.0 * 1024 * 1024))
+                                                                Text(
+                                                                    "Device storage: $freeGb GB free",
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                                                                )
+                                                            }
+
+                                                            Button(
+                                                                onClick = onDownloadModel,
+                                                                colors = ButtonDefaults.buttonColors(
+                                                                    containerColor = ColorOrange,
+                                                                    contentColor = Color.White,
+                                                                ),
+                                                                shape = RoundedCornerShape(12.dp),
+                                                            ) {
+                                                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                                Spacer(Modifier.width(6.dp))
+                                                                Text("Download", fontWeight = FontWeight.Bold)
+                                                            }
+                                                        }
+
+                                                        Text(
+                                                            "💡 When not installed, FoxPlayer uses online web search (Wikipedia, DuckDuckGo, Brave Search) to synthesize book details.",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Engine Option 2: Microsoft Foundry Local
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant,
+                                ),
+                                border = BorderStroke(
+                                    if (localChatEngineMode == LocalChatEngineMode.FOUNDRY_LOCAL) 2.dp else 1.dp,
+                                    if (localChatEngineMode == LocalChatEngineMode.FOUNDRY_LOCAL) ColorBlueVioletLight else if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant,
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onLocalChatEngineModeChange(LocalChatEngineMode.FOUNDRY_LOCAL) },
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Psychology,
+                                                contentDescription = null,
+                                                tint = ColorBlueVioletLight,
+                                                modifier = Modifier.size(20.dp),
+                                            )
+                                            Column {
                                                 Text(
-                                                    "💡 When not installed, FoxPlayer uses online web search (Wikipedia, DuckDuckGo, Brave Search) to synthesize book details.",
+                                                    "Microsoft Foundry Local",
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                                                )
+                                                Text(
+                                                    "On-Demand On-Device LLM",
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                                                    color = if (isDark) ColorBlueVioletLight else MaterialTheme.colorScheme.primary,
                                                 )
                                             }
                                         }
+                                        RadioButton(
+                                            selected = localChatEngineMode == LocalChatEngineMode.FOUNDRY_LOCAL,
+                                            onClick = { onLocalChatEngineModeChange(LocalChatEngineMode.FOUNDRY_LOCAL) },
+                                            colors = RadioButtonDefaults.colors(
+                                                selectedColor = ColorBlueVioletLight,
+                                                unselectedColor = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                                            ),
+                                        )
+                                    }
+
+                                    Text(
+                                        "Runs an on-device Large Language Model (Qwen 2.5, Phi-3.5) with agentic tool calling through Microsoft Foundry Local / ONNX GenAI. Private, 100% offline, zero cloud API fees.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+
+                                    if (localChatEngineMode == LocalChatEngineMode.FOUNDRY_LOCAL) {
+                                        HorizontalDivider(
+                                            color = if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                            modifier = Modifier.padding(vertical = 2.dp),
+                                        )
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        ) {
+                                            SpecChip(label = "Runtime", value = "ONNX GenAI", isDark = isDark)
+                                            SpecChip(label = "Hardware", value = "CPU / NPU", isDark = isDark)
+                                            SpecChip(label = "Privacy", value = "100% Local", isDark = isDark)
+                                        }
+
+                                        // Model Selection Dropdown for Foundry Local
+                                        var showFoundryMenu by remember { mutableStateOf(false) }
+                                        Box(modifier = Modifier.fillMaxWidth()) {
+                                            OutlinedButton(
+                                                onClick = { showFoundryMenu = true },
+                                                shape = RoundedCornerShape(12.dp),
+                                                modifier = Modifier.fillMaxWidth(),
+                                            ) {
+                                                Icon(Icons.Default.Memory, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(Modifier.width(8.dp))
+                                                Text("Model: $foundryModel")
+                                                Spacer(Modifier.weight(1f))
+                                                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                            }
+
+                                            DropdownMenu(
+                                                expanded = showFoundryMenu,
+                                                onDismissRequest = { showFoundryMenu = false },
+                                            ) {
+                                                listOf(
+                                                    "qwen2.5-0.5b-instruct" to "Qwen 2.5 0.5B (Recommended · Fast, ~350MB)",
+                                                    "phi-3.5-mini" to "Microsoft Phi-3.5-mini (Deep Reasoning, ~1.8GB)",
+                                                    "qwen2.5-1.5b-instruct" to "Qwen 2.5 1.5B (Balanced, ~900MB)",
+                                                    "qwen2.5-coder-0.5b" to "Qwen 2.5 Coder 0.5B (Compact)",
+                                                ).forEach { (id, label) ->
+                                                    DropdownMenuItem(
+                                                        text = {
+                                                            Text(
+                                                                label,
+                                                                fontWeight = if (id == foundryModel) FontWeight.Bold else FontWeight.Normal,
+                                                            )
+                                                        },
+                                                        onClick = {
+                                                            onFoundryModelChange(id)
+                                                            showFoundryMenu = false
+                                                        },
+                                                        leadingIcon = {
+                                                            if (id == foundryModel) {
+                                                                Icon(Icons.Default.Check, contentDescription = null, tint = ColorBlueVioletLight)
+                                                            }
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        // Endpoint URL Editor
+                                        var showEndpointField by remember { mutableStateOf(false) }
+                                        if (showEndpointField) {
+                                            OutlinedTextField(
+                                                value = foundryEndpoint,
+                                                onValueChange = onFoundryEndpointChange,
+                                                label = { Text("Foundry Local Endpoint URL") },
+                                                placeholder = { Text("http://127.0.0.1:8080/v1") },
+                                                singleLine = true,
+                                                modifier = Modifier.fillMaxWidth(),
+                                                shape = RoundedCornerShape(12.dp),
+                                            )
+                                        } else {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                            ) {
+                                                Text(
+                                                    "Endpoint: $foundryEndpoint",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                                                )
+                                                TextButton(
+                                                    onClick = { showEndpointField = true },
+                                                    contentPadding = PaddingValues(0.dp),
+                                                ) {
+                                                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                    Spacer(Modifier.width(4.dp))
+                                                    Text("Edit", fontSize = 11.sp, color = ColorBlueVioletLight)
+                                                }
+                                            }
+                                        }
+
+                                        // Test Connection & Status Button
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                        ) {
+                                            Button(
+                                                onClick = {
+                                                    if (onTestFoundryConnection != null) {
+                                                        isTestingConnection = true
+                                                        connectionStatusText = null
+                                                        coroutineScope.launch {
+                                                            val status = onTestFoundryConnection()
+                                                            isTestingConnection = false
+                                                            isConnectionSuccess = status.isSuccess
+                                                            connectionStatusText = if (status.isSuccess) {
+                                                                val modelsInfo = if (status.models.isNotEmpty()) " (${status.models.size} models)" else ""
+                                                                "Active (${status.latencyMs}ms)$modelsInfo"
+                                                            } else {
+                                                                "Offline: ${status.message.take(24)}"
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                enabled = !isTestingConnection && onTestFoundryConnection != null,
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = ColorBlueViolet,
+                                                    contentColor = Color.White,
+                                                ),
+                                                shape = RoundedCornerShape(10.dp),
+                                            ) {
+                                                if (isTestingConnection) {
+                                                    CircularProgressIndicator(
+                                                        modifier = Modifier.size(14.dp),
+                                                        strokeWidth = 2.dp,
+                                                        color = Color.White,
+                                                    )
+                                                    Spacer(Modifier.width(6.dp))
+                                                    Text("Testing...")
+                                                } else {
+                                                    Icon(Icons.Default.Sensors, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                    Spacer(Modifier.width(6.dp))
+                                                    Text("Test Connection")
+                                                }
+                                            }
+
+                                            if (connectionStatusText != null) {
+                                                Text(
+                                                    connectionStatusText!!,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = if (isConnectionSuccess) Color(0xFF34D399) else MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.padding(start = 8.dp),
+                                                )
+                                            }
+                                        }
+
+                                        Text(
+                                            "💡 Seamless Fallback: If Foundry Local is not detected when you ask a question, FoxPlayer automatically falls back to Fast Local Search so you always receive an answer.",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                                        )
                                     }
                                 }
                             }

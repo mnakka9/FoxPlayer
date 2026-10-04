@@ -54,6 +54,7 @@ import kotlinx.coroutines.launch
 import mn.blazeapps.foxplayer.data.ai.AiChatMessage
 import mn.blazeapps.foxplayer.data.ai.ChatSender
 import mn.blazeapps.foxplayer.data.ai.ChatSource
+import mn.blazeapps.foxplayer.data.ai.LocalChatEngineMode
 import mn.blazeapps.foxplayer.ui.theme.*
 
 @Composable
@@ -63,6 +64,7 @@ fun BookAiChatDialog(
     onSendMessage: (String) -> Unit,
     onClearChat: () -> Unit,
     onAddBookmarkNote: (String) -> Unit = {},
+    engineMode: LocalChatEngineMode = LocalChatEngineMode.FAST_LOCAL,
     onDismiss: () -> Unit,
 ) {
     val isDark = MaterialTheme.colorScheme.background == BgDeep
@@ -132,7 +134,10 @@ fun BookAiChatDialog(
                                 color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
                             )
                             Text(
-                                "Web search & Notes",
+                                when (engineMode) {
+                                    LocalChatEngineMode.FOUNDRY_LOCAL -> "Microsoft Foundry Local (On-Device LLM)"
+                                    LocalChatEngineMode.FAST_LOCAL -> "Fast Local · Web search & Notes"
+                                },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -222,7 +227,7 @@ fun BookAiChatDialog(
 
                         if (isGenerating) {
                             item {
-                                GeneratingBubble(isDark = isDark)
+                                GeneratingBubble(isDark = isDark, engineMode = engineMode)
                             }
                         }
                     }
@@ -721,6 +726,7 @@ fun SourceBadge(
         "Brave Search" -> Color(0x2EFB542B) to Color(0xFFFF7A59)
         "Bookmarks" -> Color(0x2E10B981) to Color(0xFF6EE7B7)
         "On-Device Neural Model" -> ColorPurpleDim to ColorPurple
+        "Microsoft Foundry Local", "Foundry Local Fallback" -> Color(0x2E10B981) to Color(0xFF34D399)
         else -> ColorOrangeDim to ColorOrangeLight
     }
 
@@ -740,7 +746,10 @@ fun SourceBadge(
 }
 
 @Composable
-private fun GeneratingBubble(isDark: Boolean) {
+private fun GeneratingBubble(
+    isDark: Boolean,
+    engineMode: LocalChatEngineMode = LocalChatEngineMode.FAST_LOCAL,
+) {
     Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.CenterStart,
@@ -758,10 +767,13 @@ private fun GeneratingBubble(isDark: Boolean) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(14.dp),
                     strokeWidth = 2.dp,
-                    color = ColorOrange,
+                    color = if (engineMode == LocalChatEngineMode.FOUNDRY_LOCAL) ColorBlueVioletLight else ColorOrange,
                 )
                 Text(
-                    "Searching web & summarizing...",
+                    when (engineMode) {
+                        LocalChatEngineMode.FOUNDRY_LOCAL -> "Foundry Local reasoning & searching..."
+                        LocalChatEngineMode.FAST_LOCAL -> "Searching web & summarizing..."
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )

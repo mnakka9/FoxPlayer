@@ -3,6 +3,7 @@ package mn.blazeapps.foxplayer.data.ai
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import mn.blazeapps.foxplayer.data.BookmarkWithChapter
@@ -67,7 +68,8 @@ data class ParsedSeries(
 class AiChatEngine(
     private val modelManager: OnnxModelManager? = null,
     private val onnxEngine: OnnxBookMetadataEngine? = null,
-    private val localLlmClient: LocalLlmClient = LocalLlmClient(),
+    val localLlmClient: LocalLlmClient = LocalLlmClient(),
+    val localChatPreferences: LocalChatPreferences? = null,
 ) {
     companion object {
         private const val TAG = "FoxPlayer-AiChat"
@@ -308,40 +310,67 @@ class AiChatEngine(
         book: BookEntity?,
     ): AiChatMessage = withContext(Dispatchers.IO) {
         val cleanTopic = cleanSearchTopic(query)
+        val engineMode = localChatPreferences?.engineMode?.value ?: LocalChatEngineMode.FAST_LOCAL
+        val foundryEndpoint = localChatPreferences?.foundryEndpoint?.value ?: LocalLlmClient.DEFAULT_ENDPOINT
+        val foundryModel = localChatPreferences?.foundryModel?.value ?: LocalChatPreferences.DEFAULT_MODEL
 
-        // 1. If Qualcomm GenieX runtime / local OpenAI-compatible endpoint is available,
-        // execute the agentic tool-calling loop (Model calls web_search -> Android executes search -> Model synthesizes)
-        if (localLlmClient.isAvailable()) {
-            val agenticResult = localLlmClient.chatWithAgenticSearch(query) { toolQuery ->
-                runBlocking(Dispatchers.IO) {
-                    val wDeferred = async { queryWikipedia(toolQuery) }
-                    val dDeferred = async { queryDuckDuckGo(toolQuery) }
-                    val bDeferred = async { queryBrave(toolQuery) }
-                    val w = wDeferred.await()
-                    val d = dDeferred.await()
-                    val b = bDeferred.await()
-                    buildString {
-                        if (!w?.extract.isNullOrBlank()) append("Wikipedia: ").append(w!!.extract).append("\n\n")
-                        if (!d?.abstractText.isNullOrBlank()) append("DuckDuckGo: ").append(d!!.abstractText).append("\n\n")
-                        d?.webResults?.take(3)?.forEach { append("• ").append(it.title).append(": ").append(it.snippet).append("\n") }
-                        b?.snippets?.take(2)?.forEach { append("Brave Snippet: ").append(it).append("\n") }
+        localLlmClient.endpointUrl = foundryEndpoint
+        localLlmClient.modelName = foundryModel
+
+        if (engineMode == LocalChatEngineMode.FOUNDRY_LOCAL) {
+            // 1. If Microsoft Foundry Local runtime is active, execute the agentic tool-calling loop
+            if (localLlmClient.isAvailable()) {
+                val agenticResult = localLlmClient.chatWithAgenticSearch(
+                    query = query,
+                    bookTitle = book?.title,
+                    bookAuthor = book?.author,
+                ) { toolQuery ->
+                    runBlocking(Dispatchers.IO) {
+                        val wDeferred = async { queryWikipedia(toolQuery) }
+                        val dDeferred = async { queryDuckDuckGo(toolQuery) }
+                        val bDeferred = async { queryBrave(toolQuery) }
+                        val w = wDeferred.await()
+                        val d = dDeferred.await()
+                        val b = bDeferred.await()
+                        buildString {
+                            if (!w?.extract.isNullOrBlank()) append("Wikipedia: ").append(w!!.extract).append("\n\n")
+                            if (!d?.abstractText.isNullOrBlank()) append("DuckDuckGo: ").append(d!!.abstractText).append("\n\n")
+                            d?.webResults?.take(3)?.forEach { append("• ").append(it.title).append(": ").append(it.snippet).append("\n") }
+                            b?.snippets?.take(2)?.forEach { append("Brave Snippet: ").append(it).append("\n") }
+                        }
                     }
                 }
+                if (agenticResult != null && agenticResult.first.isNotBlank()) {
+                    return@withContext AiChatMessage(
+                        sender = ChatSender.Assistant,
+                        text = agenticResult.first,
+                        sources = listOf(
+                            ChatSource("Microsoft Foundry Local", foundryModel),
+                            ChatSource("Live Web & Knowledge Tools", "Agentic Tool Result"),
+                        ),
+                    )
+                }
             }
-            if (agenticResult != null) {
-                return@withContext AiChatMessage(
-                    sender = ChatSender.Assistant,
-                    text = agenticResult.first,
-                    sources = listOf(
-                        ChatSource("Local LLM (GenieX/Qwen)", "Agentic Tool Calling"),
-                        ChatSource("Live Web Search", "Tool Result"),
-                    ),
-                )
-            }
-        }
 
-        // 2. Autonomous on-device multi-engine search:
-        // Query Wikipedia, DuckDuckGo HTML, and Brave Search concurrently
+            // Fallback: If Foundry Local is not reachable or returned null, execute Fast Local search
+            // and attach a clear notice so the user still gets an instant reliable answer
+            val fastResult = executeFastLocalSearch(cleanTopic, query, book)
+            val fallbackNotice = "\n\n> ℹ️ *Foundry Local service was not detected at `$foundryEndpoint`. Response derived via Fast Local Search. You can start Foundry Local or switch engines in Settings.*"
+            return@withContext fastResult.copy(
+                text = fastResult.text + fallbackNotice,
+                sources = fastResult.sources + listOf(ChatSource("Foundry Local Fallback", "Service Offline")),
+            )
+        } else {
+            // Default Fast Local search engine (Wikipedia + DuckDuckGo + Brave + SmolLM2 ONNX)
+            return@withContext executeFastLocalSearch(cleanTopic, query, book)
+        }
+    }
+
+    private suspend fun executeFastLocalSearch(
+        cleanTopic: String,
+        query: String,
+        book: BookEntity?,
+    ): AiChatMessage = coroutineScope {
         val wikiDeferred = async { queryWikipedia(cleanTopic) }
         val ddgDeferred = async { queryDuckDuckGo(cleanTopic) }
         val braveDeferred = async { queryBrave(cleanTopic) }
@@ -356,10 +385,10 @@ class AiChatEngine(
             // Check if query matches current audiobook metadata
             if (book != null) {
                 val bookMatch = handleBookFallbackSearch(query, book)
-                if (bookMatch != null) return@withContext bookMatch
+                if (bookMatch != null) return@coroutineScope bookMatch
             }
 
-            return@withContext AiChatMessage(
+            return@coroutineScope AiChatMessage(
                 sender = ChatSender.Assistant,
                 text = "I searched across **Wikipedia**, **DuckDuckGo**, and **Brave Search** for **\"$query\"**, but no relevant information or definitions could be found.\n\n" +
                     "💡 *Tip: Check your network connection or try rephrasing with simpler keywords.*",
@@ -367,7 +396,7 @@ class AiChatEngine(
             )
         }
 
-        // 3. Run neural LLM forward pass if SmolLM ONNX model is available locally
+        // Run neural LLM forward pass if SmolLM ONNX model is available locally
         var usedOnnx = false
         if (onnxEngine != null && modelManager?.isModelDownloaded() == true) {
             val prompt = buildSmolLmChatPrompt(query, wikiData, ddgData, braveData)

@@ -103,6 +103,10 @@ import mn.blazeapps.foxplayer.ui.theme.ColorRed
 import mn.blazeapps.foxplayer.ui.theme.TextMuted
 import mn.blazeapps.foxplayer.ui.theme.TextPrimary
 import mn.blazeapps.foxplayer.ui.theme.TextSecondary
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import mn.blazeapps.foxplayer.data.ai.LocalChatEngineMode
+import mn.blazeapps.foxplayer.data.ai.LocalLlmClient
 import mn.blazeapps.foxplayer.ui.settings.SettingsDialog
 import mn.blazeapps.foxplayer.ui.theme.ThemeMode
 import mn.blazeapps.foxplayer.FoxPlayerApplication
@@ -123,6 +127,10 @@ fun LibraryScreen(
     val isGeminiChatEnabled by geminiPreferences.isChatEnabled.collectAsStateWithLifecycle()
     val customGeminiApiKey by geminiPreferences.customApiKey.collectAsStateWithLifecycle()
     val selectedGeminiModel by geminiPreferences.selectedModel.collectAsStateWithLifecycle()
+    val localChatPreferences = app.container.localChatPreferences
+    val localChatEngineMode by localChatPreferences.engineMode.collectAsStateWithLifecycle()
+    val foundryEndpoint by localChatPreferences.foundryEndpoint.collectAsStateWithLifecycle()
+    val foundryModel by localChatPreferences.foundryModel.collectAsStateWithLifecycle()
 
     val books by viewModel.books.collectAsStateWithLifecycle()
     val visibleBooks by viewModel.visibleBooks.collectAsStateWithLifecycle()
@@ -344,6 +352,17 @@ fun LibraryScreen(
             freeSpaceBytes = viewModel.getFreeSpaceBytes(),
             themeMode = themeMode,
             onThemeModeChange = onThemeModeChange,
+            localChatEngineMode = localChatEngineMode,
+            onLocalChatEngineModeChange = localChatPreferences::setEngineMode,
+            foundryEndpoint = foundryEndpoint,
+            onFoundryEndpointChange = localChatPreferences::setFoundryEndpoint,
+            foundryModel = foundryModel,
+            onFoundryModelChange = localChatPreferences::setFoundryModel,
+            onTestFoundryConnection = {
+                withContext(Dispatchers.IO) {
+                    LocalLlmClient(endpointUrl = foundryEndpoint, modelName = foundryModel).testConnection()
+                }
+            },
             isGeminiChatEnabled = isGeminiChatEnabled,
             onGeminiChatEnabledChange = geminiPreferences::setChatEnabled,
             geminiApiKey = customGeminiApiKey,

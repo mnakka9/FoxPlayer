@@ -1,6 +1,8 @@
 package mn.blazeapps.foxplayer.data.ai
 
 import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.OutputStreamWriter
@@ -8,8 +10,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Client for local on-device LLM runtimes supporting OpenAI-compatible APIs,
- * such as Qualcomm GenieX runtime (e.g. running local Qwen), Ollama, or llama.cpp.
+ * Client for on-device LLM runtimes supporting OpenAI-compatible APIs,
+ * such as Microsoft Foundry Local, Qualcomm GenieX runtime, Ollama, or llama.cpp.
  *
  * Implements agentic tool calling: when asked a question requiring current knowledge, lore,
  * or book context, the local model invokes the `web_search` tool, which is executed
@@ -17,9 +19,18 @@ import java.net.URL
  */
 class LocalLlmClient(
     var endpointUrl: String = DEFAULT_ENDPOINT,
+    var modelName: String = DEFAULT_MODEL,
 ) {
+    data class ConnectionStatus(
+        val isSuccess: Boolean,
+        val latencyMs: Long = 0,
+        val models: List<String> = emptyList(),
+        val message: String = "",
+    )
+
     companion object {
         const val DEFAULT_ENDPOINT = "http://127.0.0.1:8080/v1"
+        const val DEFAULT_MODEL = "qwen2.5-0.5b-instruct"
         private const val TAG = "FoxPlayer-LocalLLM"
 
         private fun logE(message: String, throwable: Throwable? = null) {
@@ -32,14 +43,14 @@ class LocalLlmClient(
     }
 
     /**
-     * Checks if a local LLM daemon (e.g. GenieX or local runner) is active.
+     * Checks if a local LLM daemon (e.g. Foundry Local or local runner) is active.
      */
     fun isAvailable(): Boolean {
         return try {
             val url = URL("$endpointUrl/models")
             val conn = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 800
-                readTimeout = 800
+                connectTimeout = 1000
+                readTimeout = 1000
                 requestMethod = "GET"
             }
             val code = conn.responseCode
@@ -47,6 +58,59 @@ class LocalLlmClient(
             code in 200..399
         } catch (_: Exception) {
             false
+        }
+    }
+
+    /**
+     * Tests the connection to the Foundry Local / local LLM server and returns latency and available models.
+     */
+    suspend fun testConnection(): ConnectionStatus = withContext(Dispatchers.IO) {
+        val start = System.currentTimeMillis()
+        try {
+            val url = URL("$endpointUrl/models")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 1500
+                readTimeout = 1500
+                requestMethod = "GET"
+            }
+            val code = conn.responseCode
+            val latency = System.currentTimeMillis() - start
+            if (code in 200..399) {
+                val text = conn.inputStream.bufferedReader().use { it.readText() }
+                conn.disconnect()
+                val modelsList = mutableListOf<String>()
+                try {
+                    val json = JSONObject(text)
+                    val data = json.optJSONArray("data")
+                    if (data != null) {
+                        for (i in 0 until data.length()) {
+                            val id = data.getJSONObject(i).optString("id")
+                            if (id.isNotBlank()) modelsList.add(id)
+                        }
+                    }
+                } catch (_: Exception) {
+                    // ignore JSON parse issue for raw lists
+                }
+                ConnectionStatus(
+                    isSuccess = true,
+                    latencyMs = latency,
+                    models = modelsList,
+                    message = "Connected to Foundry Local endpoint (${latency}ms)",
+                )
+            } else {
+                conn.disconnect()
+                ConnectionStatus(
+                    isSuccess = false,
+                    latencyMs = latency,
+                    message = "Server returned HTTP $code",
+                )
+            }
+        } catch (e: Exception) {
+            ConnectionStatus(
+                isSuccess = false,
+                latencyMs = System.currentTimeMillis() - start,
+                message = e.message ?: "Endpoint unreachable",
+            )
         }
     }
 
@@ -60,16 +124,28 @@ class LocalLlmClient(
      */
     fun chatWithAgenticSearch(
         query: String,
+        bookTitle: String? = null,
+        bookAuthor: String? = null,
         searchCallback: (String) -> String,
     ): Pair<String, Boolean>? {
         return try {
+            val systemPrompt = buildString {
+                append("You are an intelligent reading companion and knowledge assistant for FoxPlayer.")
+                if (!bookTitle.isNullOrBlank()) {
+                    append(" The user is currently reading/listening to '$bookTitle'")
+                    if (!bookAuthor.isNullOrBlank()) append(" by $bookAuthor")
+                    append(".")
+                }
+                append(" For entities, characters, mythology, lore, or questions needing facts, invoke the web_search tool. Otherwise, answer conversationally.")
+            }
+
             val initialJson = JSONObject().apply {
-                put("model", "qwen")
+                put("model", modelName)
                 put("temperature", 0.7)
                 val messagesArray = JSONArray().apply {
                     put(JSONObject().apply {
                         put("role", "system")
-                        put("content", "You are an intelligent audiobook and knowledge assistant. When asked about entities, mythology, characters, or topics requiring facts, invoke the web_search tool.")
+                        put("content", systemPrompt)
                     })
                     put(JSONObject().apply {
                         put("role", "user")
@@ -100,7 +176,7 @@ class LocalLlmClient(
                 put("tools", toolsArray)
             }
 
-            val firstResponse = postJson("$endpointUrl/chat/completions", initialJson, timeoutMs = 6000) ?: return null
+            val firstResponse = postJson("$endpointUrl/chat/completions", initialJson, timeoutMs = 8000) ?: return null
             val firstChoice = firstResponse.optJSONArray("choices")?.optJSONObject(0) ?: return null
             val messageObj = firstChoice.optJSONObject("message") ?: return null
 
@@ -136,12 +212,12 @@ class LocalLlmClient(
                 }
 
                 val secondJson = JSONObject().apply {
-                    put("model", "qwen")
+                    put("model", modelName)
                     put("temperature", 0.7)
                     put("messages", followUpMessages)
                 }
 
-                val finalResp = postJson("$endpointUrl/chat/completions", secondJson, timeoutMs = 12000)
+                val finalResp = postJson("$endpointUrl/chat/completions", secondJson, timeoutMs = 15000)
                 val finalChoice = finalResp?.optJSONArray("choices")?.optJSONObject(0)
                 val finalText = finalChoice?.optJSONObject("message")?.optString("content")?.trim()
 

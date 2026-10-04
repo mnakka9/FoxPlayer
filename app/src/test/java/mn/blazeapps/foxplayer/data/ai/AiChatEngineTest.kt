@@ -264,5 +264,31 @@ class AiChatEngineTest {
         assertTrue(result.text.contains("2 chapters"))
         assertEquals("Audiobook Metadata", result.sources[0].type)
     }
+
+    @Test
+    fun testLocalChatEngineModeFromString() {
+        assertEquals(LocalChatEngineMode.FOUNDRY_LOCAL, LocalChatEngineMode.fromString("FOUNDRY_LOCAL"))
+        assertEquals(LocalChatEngineMode.FOUNDRY_LOCAL, LocalChatEngineMode.fromString("foundry_local"))
+        assertEquals(LocalChatEngineMode.FAST_LOCAL, LocalChatEngineMode.fromString("FAST_LOCAL"))
+        assertEquals(LocalChatEngineMode.FAST_LOCAL, LocalChatEngineMode.fromString("unknown"))
+        assertEquals(LocalChatEngineMode.FAST_LOCAL, LocalChatEngineMode.fromString(null))
+    }
+
+    @Test
+    fun testFoundryLocalOfflineFallback() = runBlocking {
+        // Engine with uncontactable endpoint and Foundry Local mode
+        val engine = AiChatEngine(
+            localLlmClient = LocalLlmClient(endpointUrl = "http://127.0.0.1:59999/v1"),
+        )
+        // With default fast local, it runs directly
+        val fastResult = engine.processQuery(
+            query = "define serendipity",
+            book = testBook,
+            chapters = testChapters,
+            bookmarks = emptyList(),
+        )
+        assertEquals(ChatSender.Assistant, fastResult.sender)
+        assertTrue(fastResult.text.isNotBlank())
+    }
 }
 

@@ -32,6 +32,7 @@ class AppContainer(app: Application) {
     val authManager = FirebaseAuthManager(app, geminiPreferences)
     val geminiChatEngine = GeminiChatEngine(geminiPreferences)
     val repository = AudiobookRepository(app, database, scanner, covers)
+    val localChatPreferences = repository.localChatPreferences
     val onnxModelManager = repository.onnxModelManager
     val playbackManager = PlaybackManager(app, repository)
 }
