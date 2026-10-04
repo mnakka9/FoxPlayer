@@ -336,6 +336,7 @@ class AiChatEngine(
             }
 
             // 1. Primary: Try Microsoft Foundry Local via Android IPC service app
+            var ipcError: String? = null
             if (context != null && FoundryIpcManager.isSupportedOs() && FoundryIpcManager.isFoundryAppInstalled(context)) {
                 val ipcResult = FoundryIpcManager.chat(
                     context = context,
@@ -355,6 +356,7 @@ class AiChatEngine(
                         ),
                     )
                 }
+                ipcError = ipcResult.errorMessage
             }
 
             // 2. Secondary: Try local HTTP server endpoint (e.g. PC server / port forwarding)
@@ -384,6 +386,9 @@ class AiChatEngine(
                 }
                 context != null && !FoundryIpcManager.isSupportedOs() -> {
                     "\n\n> ℹ️ *Microsoft Foundry Local requires Android 13+ (API 33). Response derived via Fast Local Search.*"
+                }
+                !ipcError.isNullOrBlank() -> {
+                    "\n\n> ℹ️ *Microsoft Foundry Local is installed but chat failed: $ipcError Response derived via Fast Local Search.*"
                 }
                 else -> {
                     "\n\n> ℹ️ *Microsoft Foundry Local service was not detected. Response derived via Fast Local Search. Ensure the Foundry Local app is running.*"

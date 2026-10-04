@@ -213,7 +213,12 @@ object FoundryIpcManager {
             val allModels = try { catalog.listModels() } catch (_: Exception) { emptyList() }
 
             // Determine best model to use
+            val preferredAvailable = !preferredModel.isNullOrBlank() &&
+                (loadedModels.any { it.alias.equals(preferredModel, ignoreCase = true) } ||
+                    cachedModels.any { it.alias.equals(preferredModel, ignoreCase = true) })
             val targetAlias = when {
+                !preferredAvailable && loadedModels.isNotEmpty() -> loadedModels.first().alias
+                !preferredAvailable && cachedModels.isNotEmpty() -> cachedModels.first().alias
                 !preferredModel.isNullOrBlank() && (allModels.any { it.alias.equals(preferredModel, ignoreCase = true) } || loadedModels.any { it.alias.equals(preferredModel, ignoreCase = true) }) -> {
                     allModels.firstOrNull { it.alias.equals(preferredModel, ignoreCase = true) }?.alias
                         ?: preferredModel
