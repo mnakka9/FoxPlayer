@@ -5,6 +5,9 @@ import mn.blazeapps.foxplayer.data.AudiobookDatabase
 import mn.blazeapps.foxplayer.data.AudiobookRepository
 import mn.blazeapps.foxplayer.data.CoverResolver
 import mn.blazeapps.foxplayer.data.FolderScanner
+import mn.blazeapps.foxplayer.data.auth.FirebaseAuthManager
+import mn.blazeapps.foxplayer.data.gemini.GeminiChatEngine
+import mn.blazeapps.foxplayer.data.gemini.GeminiPreferences
 import mn.blazeapps.foxplayer.playback.PlaybackManager
 import mn.blazeapps.foxplayer.ui.theme.ThemePreferences
 
@@ -25,6 +28,9 @@ class AppContainer(app: Application) {
     private val scanner = FolderScanner(app, metadata)
     private val covers = CoverResolver(app, metadata)
     val themePreferences = ThemePreferences(app)
+    val geminiPreferences = GeminiPreferences(app)
+    val authManager = FirebaseAuthManager(app)
+    val geminiChatEngine = GeminiChatEngine(geminiPreferences)
     val repository = AudiobookRepository(app, database, scanner, covers)
     val onnxModelManager = repository.onnxModelManager
     val playbackManager = PlaybackManager(app, repository)

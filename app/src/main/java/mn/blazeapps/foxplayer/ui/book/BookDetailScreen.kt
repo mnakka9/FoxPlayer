@@ -122,6 +122,11 @@ import mn.blazeapps.foxplayer.data.BookmarkWithChapter
 import mn.blazeapps.foxplayer.data.entities.ChapterEntity
 import mn.blazeapps.foxplayer.ui.formatDuration
 import mn.blazeapps.foxplayer.ui.library.CoverArt
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import mn.blazeapps.foxplayer.R
+import mn.blazeapps.foxplayer.FoxPlayerApplication
+import mn.blazeapps.foxplayer.ui.gemini.GeminiChatActivity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -133,6 +138,12 @@ fun BookDetailScreen(
     onBack: () -> Unit,
     onRestoreAccess: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val app = context.applicationContext as FoxPlayerApplication
+    val geminiPreferences = app.container.geminiPreferences
+    val isGeminiChatEnabled by geminiPreferences.isChatEnabled.collectAsStateWithLifecycle()
+    val customGeminiApiKey by geminiPreferences.customApiKey.collectAsStateWithLifecycle()
+
     LaunchedEffect(bookId) { viewModel.open(bookId) }
 
     val book by viewModel.book.collectAsStateWithLifecycle()
@@ -221,6 +232,24 @@ fun BookDetailScreen(
                             contentDescription = "Book Information & Series",
                             tint = if (showInfoDialog) ColorOrange else if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
                         )
+                    }
+                    if (isGeminiChatEnabled) {
+                        IconButton(onClick = {
+                            context.startActivity(
+                                GeminiChatActivity.createIntent(
+                                    context = context,
+                                    bookId = book?.id,
+                                    bookTitle = book?.title,
+                                    bookAuthor = book?.author,
+                                )
+                            )
+                        }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_gemini),
+                                contentDescription = "Gemini Cloud AI Companion",
+                                tint = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                     IconButton(onClick = { showSettingsDialog = true }) {
                         Icon(
@@ -593,6 +622,10 @@ fun BookDetailScreen(
             freeSpaceBytes = viewModel.getFreeSpaceBytes(),
             themeMode = themeMode,
             onThemeModeChange = onThemeModeChange,
+            isGeminiChatEnabled = isGeminiChatEnabled,
+            onGeminiChatEnabledChange = geminiPreferences::setChatEnabled,
+            geminiApiKey = customGeminiApiKey,
+            onGeminiApiKeyChange = geminiPreferences::setCustomApiKey,
             onDownloadModel = viewModel::downloadOnnxModel,
             onDeleteModel = { viewModel.deleteOnnxModel() },
             onRescanChapters = viewModel::rescanChapters,

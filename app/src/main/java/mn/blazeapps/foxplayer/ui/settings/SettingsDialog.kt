@@ -34,6 +34,10 @@ fun SettingsDialog(
     freeSpaceBytes: Long,
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
+    isGeminiChatEnabled: Boolean = false,
+    onGeminiChatEnabledChange: (Boolean) -> Unit = {},
+    geminiApiKey: String = "",
+    onGeminiApiKeyChange: (String) -> Unit = {},
     onDownloadModel: () -> Unit,
     onDeleteModel: () -> Unit,
     onRescanChapters: (() -> Unit)? = null,
@@ -493,6 +497,105 @@ fun SettingsDialog(
                                     isDark = isDark,
                                     onClick = { onThemeModeChange(ThemeMode.SYSTEM) },
                                 )
+                            }
+                        }
+                    }
+
+                    // Section: Google Gemini AI Companion
+                    item {
+                        SectionHeader(
+                            title = "Google Gemini Cloud AI",
+                            icon = Icons.Default.AutoAwesome,
+                            iconTint = ColorOrangeLight,
+                            isDark = isDark,
+                        )
+                        Spacer(Modifier.height(8.dp))
+
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant,
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "Enable Gemini Chat Activity",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Text(
+                                            "Show ✦ Gemini action icon in the book detail bar to chat with Gemini 1.5 Flash using Firebase login.",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    Switch(
+                                        checked = isGeminiChatEnabled,
+                                        onCheckedChange = onGeminiChatEnabledChange,
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = Color.White,
+                                            checkedTrackColor = ColorOrange,
+                                        ),
+                                    )
+                                }
+
+                                if (isGeminiChatEnabled) {
+                                    HorizontalDivider(
+                                        color = if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                        modifier = Modifier.padding(vertical = 2.dp),
+                                    )
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    ) {
+                                        SpecChip(label = "Engine", value = "Gemini 1.5 Flash", isDark = isDark)
+                                        SpecChip(label = "Streaming", value = "Real-Time Tokens", isDark = isDark)
+                                        SpecChip(label = "Auth", value = "Firebase Session", isDark = isDark)
+                                    }
+
+                                    var showKeyField by remember { mutableStateOf(false) }
+                                    if (showKeyField) {
+                                        OutlinedTextField(
+                                            value = geminiApiKey,
+                                            onValueChange = onGeminiApiKeyChange,
+                                            label = { Text("Gemini API Key (optional override)") },
+                                            placeholder = { Text("AIzaSy...") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(12.dp),
+                                        )
+                                    } else {
+                                        TextButton(
+                                            onClick = { showKeyField = true },
+                                            contentPadding = PaddingValues(0.dp),
+                                        ) {
+                                            Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(
+                                                if (geminiApiKey.isNotBlank()) "Gemini API Key configured (tap to edit)" else "Configure custom API key",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = ColorOrangeLight,
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

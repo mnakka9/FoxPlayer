@@ -5,6 +5,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
+    id("com.google.gms.google-services")
 }
 
 val keystorePropertiesFile = rootProject.file("keystore.properties")
@@ -12,6 +13,13 @@ val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
+
+val localPropertiesFile = rootProject.file("local.properties")
+val localProperties = Properties()
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+val geminiApiKey = localProperties.getProperty("GEMINI_API_KEY") ?: ""
 
 android {
     namespace = "mn.blazeapps.foxplayer"
@@ -23,6 +31,7 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "1.1.0"
+        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
     }
 
     signingConfigs {
@@ -67,6 +76,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     testOptions {
@@ -109,6 +119,16 @@ dependencies {
     implementation("androidx.documentfile:documentfile:1.0.1")
 
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
+
+    // Firebase BoM and Authentication
+    implementation(platform("com.google.firebase:firebase-bom:33.9.0"))
+    implementation("com.google.firebase:firebase-auth-ktx")
+
+    // Google AI Client SDK for Android (Gemini API Starter)
+    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+
+    // Secure Preferences & Crypto
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

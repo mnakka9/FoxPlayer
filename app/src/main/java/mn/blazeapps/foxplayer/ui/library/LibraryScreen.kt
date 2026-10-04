@@ -105,6 +105,7 @@ import mn.blazeapps.foxplayer.ui.theme.TextPrimary
 import mn.blazeapps.foxplayer.ui.theme.TextSecondary
 import mn.blazeapps.foxplayer.ui.settings.SettingsDialog
 import mn.blazeapps.foxplayer.ui.theme.ThemeMode
+import mn.blazeapps.foxplayer.FoxPlayerApplication
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -116,6 +117,12 @@ fun LibraryScreen(
     onOpenBook: (Long) -> Unit,
     onAddFolder: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val app = context.applicationContext as FoxPlayerApplication
+    val geminiPreferences = app.container.geminiPreferences
+    val isGeminiChatEnabled by geminiPreferences.isChatEnabled.collectAsStateWithLifecycle()
+    val customGeminiApiKey by geminiPreferences.customApiKey.collectAsStateWithLifecycle()
+
     val books by viewModel.books.collectAsStateWithLifecycle()
     val visibleBooks by viewModel.visibleBooks.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
@@ -336,6 +343,10 @@ fun LibraryScreen(
             freeSpaceBytes = viewModel.getFreeSpaceBytes(),
             themeMode = themeMode,
             onThemeModeChange = onThemeModeChange,
+            isGeminiChatEnabled = isGeminiChatEnabled,
+            onGeminiChatEnabledChange = geminiPreferences::setChatEnabled,
+            geminiApiKey = customGeminiApiKey,
+            onGeminiApiKeyChange = geminiPreferences::setCustomApiKey,
             onDownloadModel = viewModel::downloadOnnxModel,
             onDeleteModel = { viewModel.deleteOnnxModel() },
             onDismiss = { showSettingsDialog = false },

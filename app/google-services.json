@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "102938475610",
+    "project_id": "foxplayer-firebase-ai",
+    "storage_bucket": "foxplayer-firebase-ai.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:102938475610:android:a1b2c3d4e5f60718293a4b",
+        "android_client_info": {
+          "package_name": "mn.blazeapps.foxplayer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyTemplateKeyForFoxPlayerFirebase000"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
