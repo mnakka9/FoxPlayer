@@ -45,28 +45,35 @@ class GeminiChatTest {
         val loggedOut: AuthState = AuthState.LoggedOut
         assertTrue(loggedOut is AuthState.LoggedOut)
 
-        val guestUser: AuthState = AuthState.LoggedIn(
-            uid = "guest_123",
-            email = null,
-            isAnonymous = true,
-            displayName = "Guest Listener",
-        )
-        assertTrue(guestUser is AuthState.LoggedIn)
-        val guest = guestUser as AuthState.LoggedIn
-        assertTrue(guest.isAnonymous)
-        assertEquals("Guest Listener", guest.displayName)
-
-        val emailUser: AuthState = AuthState.LoggedIn(
+        val gmailUser: AuthState = AuthState.GmailUser(
             uid = "user_456",
-            email = "listener@example.com",
-            isAnonymous = false,
+            email = "listener@gmail.com",
             displayName = "listener",
         )
-        val authed = emailUser as AuthState.LoggedIn
-        assertFalse(authed.isAnonymous)
-        assertEquals("listener@example.com", authed.email)
+        assertTrue(gmailUser is AuthState.GmailUser)
+        val authed = gmailUser as AuthState.GmailUser
+        assertEquals("listener@gmail.com", authed.email)
+        assertEquals("listener", authed.displayName)
+
+        val apiKeyUser: AuthState = AuthState.ApiKeyUser(
+            maskedKey = "AIzaSy...4x9B",
+        )
+        assertTrue(apiKeyUser is AuthState.ApiKeyUser)
+        val keyAuthed = apiKeyUser as AuthState.ApiKeyUser
+        assertEquals("AIzaSy...4x9B", keyAuthed.maskedKey)
 
         val errorState: AuthState = AuthState.Error("Network failure")
         assertEquals("Network failure", (errorState as AuthState.Error).message)
+    }
+
+    @Test
+    fun testGeminiModelsManagerDefaults() {
+        val models = GeminiModelsManager.DEFAULT_MODELS
+        assertTrue(models.isNotEmpty())
+        assertTrue(models.any { it.id == "gemini-1.5-flash" && it.isRecommended })
+        assertTrue(models.any { it.id == "gemini-2.0-flash" })
+        assertTrue(models.any { it.id == "gemini-1.5-pro" })
+        assertTrue(models.any { it.id == "gemini-2.0-flash-lite" })
+        assertTrue(models.any { it.id == "gemini-1.5-flash-8b" })
     }
 }

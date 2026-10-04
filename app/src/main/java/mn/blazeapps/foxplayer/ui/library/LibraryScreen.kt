@@ -122,6 +122,7 @@ fun LibraryScreen(
     val geminiPreferences = app.container.geminiPreferences
     val isGeminiChatEnabled by geminiPreferences.isChatEnabled.collectAsStateWithLifecycle()
     val customGeminiApiKey by geminiPreferences.customApiKey.collectAsStateWithLifecycle()
+    val selectedGeminiModel by geminiPreferences.selectedModel.collectAsStateWithLifecycle()
 
     val books by viewModel.books.collectAsStateWithLifecycle()
     val visibleBooks by viewModel.visibleBooks.collectAsStateWithLifecycle()
@@ -347,6 +348,8 @@ fun LibraryScreen(
             onGeminiChatEnabledChange = geminiPreferences::setChatEnabled,
             geminiApiKey = customGeminiApiKey,
             onGeminiApiKeyChange = geminiPreferences::setCustomApiKey,
+            selectedGeminiModel = selectedGeminiModel,
+            onSelectedGeminiModelChange = geminiPreferences::setSelectedModel,
             onDownloadModel = viewModel::downloadOnnxModel,
             onDeleteModel = { viewModel.deleteOnnxModel() },
             onDismiss = { showSettingsDialog = false },

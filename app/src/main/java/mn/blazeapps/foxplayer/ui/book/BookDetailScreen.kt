@@ -143,6 +143,7 @@ fun BookDetailScreen(
     val geminiPreferences = app.container.geminiPreferences
     val isGeminiChatEnabled by geminiPreferences.isChatEnabled.collectAsStateWithLifecycle()
     val customGeminiApiKey by geminiPreferences.customApiKey.collectAsStateWithLifecycle()
+    val selectedGeminiModel by geminiPreferences.selectedModel.collectAsStateWithLifecycle()
 
     LaunchedEffect(bookId) { viewModel.open(bookId) }
 
@@ -626,6 +627,8 @@ fun BookDetailScreen(
             onGeminiChatEnabledChange = geminiPreferences::setChatEnabled,
             geminiApiKey = customGeminiApiKey,
             onGeminiApiKeyChange = geminiPreferences::setCustomApiKey,
+            selectedGeminiModel = selectedGeminiModel,
+            onSelectedGeminiModelChange = geminiPreferences::setSelectedModel,
             onDownloadModel = viewModel::downloadOnnxModel,
             onDeleteModel = { viewModel.deleteOnnxModel() },
             onRescanChapters = viewModel::rescanChapters,

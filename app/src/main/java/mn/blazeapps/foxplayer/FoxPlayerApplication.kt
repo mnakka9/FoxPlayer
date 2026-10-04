@@ -29,7 +29,7 @@ class AppContainer(app: Application) {
     private val covers = CoverResolver(app, metadata)
     val themePreferences = ThemePreferences(app)
     val geminiPreferences = GeminiPreferences(app)
-    val authManager = FirebaseAuthManager(app)
+    val authManager = FirebaseAuthManager(app, geminiPreferences)
     val geminiChatEngine = GeminiChatEngine(geminiPreferences)
     val repository = AudiobookRepository(app, database, scanner, covers)
     val onnxModelManager = repository.onnxModelManager

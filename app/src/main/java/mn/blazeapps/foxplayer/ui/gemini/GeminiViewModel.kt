@@ -10,6 +10,8 @@ import kotlinx.coroutines.launch
 import mn.blazeapps.foxplayer.FoxPlayerApplication
 import mn.blazeapps.foxplayer.data.auth.AuthState
 import mn.blazeapps.foxplayer.data.gemini.GeminiChatMessage
+import mn.blazeapps.foxplayer.data.gemini.GeminiModelInfo
+import mn.blazeapps.foxplayer.data.gemini.GeminiModelsManager
 import mn.blazeapps.foxplayer.data.gemini.MessageSender
 import java.util.UUID
 
@@ -22,7 +24,15 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
 
     val authState: StateFlow<AuthState> = authManager.authState
     val apiKeyConfigured: Boolean get() = preferences.isApiKeyConfigured()
+    val isAuthenticated: Boolean get() = authManager.isAuthenticated()
     val customApiKey: StateFlow<String> = preferences.customApiKey
+    val selectedModel: StateFlow<String> = preferences.selectedModel
+
+    private val _availableModels = MutableStateFlow<List<GeminiModelInfo>>(GeminiModelsManager.DEFAULT_MODELS)
+    val availableModels: StateFlow<List<GeminiModelInfo>> = _availableModels.asStateFlow()
+
+    private val _isFetchingModels = MutableStateFlow(false)
+    val isFetchingModels: StateFlow<Boolean> = _isFetchingModels.asStateFlow()
 
     private val _messages = MutableStateFlow<List<GeminiChatMessage>>(emptyList())
     val messages: StateFlow<List<GeminiChatMessage>> = _messages.asStateFlow()
@@ -42,6 +52,10 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
         private set
     var bookAuthor: String? = null
         private set
+
+    init {
+        refreshAvailableModels()
+    }
 
     val suggestedPrompts: List<String>
         get() {
@@ -71,9 +85,9 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
         if (_messages.value.isEmpty()) {
             val welcomeText = if (!title.isNullOrBlank()) {
                 val authorPart = if (!author.isNullOrBlank()) " by $author" else ""
-                "Welcome to Gemini AI Companion! ✦\n\nI'm ready to discuss **\"$title\"**$authorPart with you. Ask me about plot developments, thematic motifs, character motivations, or author lore."
+                "Welcome to Gemini AI Companion! ✦\n\nI'm ready to discuss **\"$title\"**$authorPart with you using **${preferences.selectedModel.value}**. Ask me about plot developments, thematic motifs, character motivations, or author lore."
             } else {
-                "Welcome to Gemini AI Companion! ✦\n\nI can analyze your audiobooks, explore plot depth, clarify complex timelines, and recommend next listens."
+                "Welcome to Gemini AI Companion! ✦\n\nI can analyze your audiobooks, explore plot depth, clarify complex timelines, and recommend next listens using **${preferences.selectedModel.value}**."
             }
             _messages.value = listOf(
                 GeminiChatMessage(
@@ -83,6 +97,23 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
                     isStreaming = false,
                 )
             )
+        }
+    }
+
+    fun selectModel(modelId: String) {
+        preferences.setSelectedModel(modelId)
+        chatEngine.resetChat()
+    }
+
+    fun refreshAvailableModels() {
+        viewModelScope.launch {
+            _isFetchingModels.value = true
+            val key = preferences.getEffectiveApiKey()
+            val result = GeminiModelsManager.fetchAvailableModels(key)
+            result.onSuccess { list ->
+                _availableModels.value = list
+            }
+            _isFetchingModels.value = false
         }
     }
 
@@ -103,29 +134,40 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
     fun updateApiKey(newKey: String) {
         preferences.setCustomApiKey(newKey)
         chatEngine.resetChat()
+        refreshAvailableModels()
     }
 
-    fun signInAnonymously(onComplete: ((Boolean, String?) -> Unit)? = null) {
-        authManager.signInAnonymously { success, error ->
-            onComplete?.invoke(success, error)
+    fun loginWithApiKey(key: String, onComplete: (Boolean, String?) -> Unit) {
+        authManager.loginWithApiKey(key) { success, err ->
+            if (success) {
+                chatEngine.resetChat()
+                refreshAvailableModels()
+            }
+            onComplete(success, err)
         }
     }
 
-    fun signInWithEmail(email: String, pass: String, onComplete: (Boolean, String?) -> Unit) {
-        authManager.signInWithEmail(email, pass, onComplete)
+    fun signInWithGmail(email: String, pass: String, onComplete: (Boolean, String?) -> Unit) {
+        authManager.signInWithGmail(email, pass, onComplete)
     }
 
-    fun signUpWithEmail(email: String, pass: String, onComplete: (Boolean, String?) -> Unit) {
-        authManager.signUpWithEmail(email, pass, onComplete)
+    fun signUpWithGmail(email: String, pass: String, onComplete: (Boolean, String?) -> Unit) {
+        authManager.signUpWithGmail(email, pass, onComplete)
     }
 
     fun signOut() {
         authManager.signOut()
+        chatEngine.resetChat()
     }
 
     fun sendMessage(prompt: String) {
         val trimmed = prompt.trim()
         if (trimmed.isEmpty() || _isStreaming.value) return
+
+        if (!authManager.isAuthenticated()) {
+            _errorMessage.value = "Please sign in with your Gmail account or enter a Gemini API Key to chat."
+            return
+        }
 
         if (!preferences.isApiKeyConfigured()) {
             _errorMessage.value = "Please configure your Gemini API Key in Settings or via AI Studio."
@@ -177,7 +219,7 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
                 _messages.value = _messages.value.map { msg ->
                     if (msg.id == geminiMsgId) {
                         msg.copy(
-                            text = "⚠️ Could not generate response: $errorMsg\n\nPlease check your internet connection or verify your Gemini API key in Settings.",
+                            text = "⚠️ Could not generate response: $errorMsg\n\nPlease check your internet connection or verify your Gemini API key.",
                             isStreaming = false,
                         )
                     } else msg

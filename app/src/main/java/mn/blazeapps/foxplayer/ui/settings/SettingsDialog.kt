@@ -38,6 +38,8 @@ fun SettingsDialog(
     onGeminiChatEnabledChange: (Boolean) -> Unit = {},
     geminiApiKey: String = "",
     onGeminiApiKeyChange: (String) -> Unit = {},
+    selectedGeminiModel: String = "gemini-1.5-flash",
+    onSelectedGeminiModelChange: (String) -> Unit = {},
     onDownloadModel: () -> Unit,
     onDeleteModel: () -> Unit,
     onRescanChapters: (() -> Unit)? = null,
@@ -539,7 +541,7 @@ fun SettingsDialog(
                                             color = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
                                         )
                                         Text(
-                                            "Show ✦ Gemini action icon in the book detail bar to chat with Gemini 1.5 Flash using Firebase login.",
+                                            "Show ✦ Gemini action icon in the book detail bar to chat with Gemini using Gmail login or API key.",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -565,9 +567,56 @@ fun SettingsDialog(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     ) {
-                                        SpecChip(label = "Engine", value = "Gemini 1.5 Flash", isDark = isDark)
+                                        SpecChip(label = "Engine", value = selectedGeminiModel, isDark = isDark)
                                         SpecChip(label = "Streaming", value = "Real-Time Tokens", isDark = isDark)
-                                        SpecChip(label = "Auth", value = "Firebase Session", isDark = isDark)
+                                        SpecChip(label = "Auth", value = "Gmail / API-Key", isDark = isDark)
+                                    }
+
+                                    // Model Selection Dropdown
+                                    var showModelMenu by remember { mutableStateOf(false) }
+                                    Box(modifier = Modifier.fillMaxWidth()) {
+                                        OutlinedButton(
+                                            onClick = { showModelMenu = true },
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("Model: $selectedGeminiModel")
+                                            Spacer(Modifier.weight(1f))
+                                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                        }
+
+                                        DropdownMenu(
+                                            expanded = showModelMenu,
+                                            onDismissRequest = { showModelMenu = false },
+                                        ) {
+                                            listOf(
+                                                "gemini-1.5-flash" to "Gemini 1.5 Flash (Recommended)",
+                                                "gemini-2.0-flash" to "Gemini 2.0 Flash (Next-Gen)",
+                                                "gemini-1.5-pro" to "Gemini 1.5 Pro (Deep Reasoning)",
+                                                "gemini-2.0-flash-lite" to "Gemini 2.0 Flash Lite (Fast)",
+                                                "gemini-1.5-flash-8b" to "Gemini 1.5 Flash 8B (Compact)",
+                                            ).forEach { (id, label) ->
+                                                DropdownMenuItem(
+                                                    text = {
+                                                        Text(
+                                                            label,
+                                                            fontWeight = if (id == selectedGeminiModel) FontWeight.Bold else FontWeight.Normal,
+                                                        )
+                                                    },
+                                                    onClick = {
+                                                        onSelectedGeminiModelChange(id)
+                                                        showModelMenu = false
+                                                    },
+                                                    leadingIcon = {
+                                                        if (id == selectedGeminiModel) {
+                                                            Icon(Icons.Default.Check, contentDescription = null, tint = ColorOrange)
+                                                        }
+                                                    },
+                                                )
+                                            }
+                                        }
                                     }
 
                                     var showKeyField by remember { mutableStateOf(false) }

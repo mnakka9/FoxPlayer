@@ -29,11 +29,13 @@ class GeminiChatEngine(
     private val tag = "GeminiChatEngine"
     private var chat: Chat? = null
     private var lastConfiguredKey: String? = null
+    private var lastConfiguredModel: String? = null
     private var lastContextPrompt: String? = null
 
     fun resetChat() {
         chat = null
         lastConfiguredKey = null
+        lastConfiguredModel = null
         lastContextPrompt = null
     }
 
@@ -42,8 +44,9 @@ class GeminiChatEngine(
     private fun getOrInitChat(bookTitle: String?, bookAuthor: String?, includeContext: Boolean): Chat {
         val apiKey = preferences.getEffectiveApiKey()
         if (apiKey.isBlank()) {
-            throw IllegalStateException("Gemini API Key is not configured. Please enter your API key in Settings or local.properties.")
+            throw IllegalStateException("Gemini API Key is not configured. Please enter your API key or log in with Gmail.")
         }
+        val modelName = preferences.selectedModel.value
 
         val contextPrompt = if (includeContext && !bookTitle.isNullOrBlank()) {
             val authorPart = if (!bookAuthor.isNullOrBlank()) " by $bookAuthor" else ""
@@ -53,12 +56,12 @@ class GeminiChatEngine(
         }
 
         val existing = chat
-        if (existing != null && lastConfiguredKey == apiKey && lastContextPrompt == contextPrompt) {
+        if (existing != null && lastConfiguredKey == apiKey && lastConfiguredModel == modelName && lastContextPrompt == contextPrompt) {
             return existing
         }
 
         val model = GenerativeModel(
-            modelName = "gemini-1.5-flash",
+            modelName = modelName,
             apiKey = apiKey,
             systemInstruction = content { text(contextPrompt) },
         )
@@ -66,6 +69,7 @@ class GeminiChatEngine(
         val newChat = model.startChat()
         chat = newChat
         lastConfiguredKey = apiKey
+        lastConfiguredModel = modelName
         lastContextPrompt = contextPrompt
         return newChat
     }

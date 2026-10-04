@@ -5,26 +5,29 @@ import android.util.Log
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
+import mn.blazeapps.foxplayer.data.gemini.GeminiPreferences
 
 sealed class AuthState {
     data object LoggedOut : AuthState()
     data object Loading : AuthState()
-    data class LoggedIn(
+    data class GmailUser(
         val uid: String,
-        val email: String?,
-        val isAnonymous: Boolean,
+        val email: String,
         val displayName: String?,
+    ) : AuthState()
+    data class ApiKeyUser(
+        val maskedKey: String,
     ) : AuthState()
     data class Error(val message: String) : AuthState()
 }
 
-class FirebaseAuthManager(private val context: Context) {
+class FirebaseAuthManager(
+    private val context: Context,
+    private val preferences: GeminiPreferences,
+) {
     private val tag = "FirebaseAuthManager"
     private var firebaseAuth: FirebaseAuth? = null
 
@@ -37,66 +40,32 @@ class FirebaseAuthManager(private val context: Context) {
                 FirebaseApp.initializeApp(context)
             }
             firebaseAuth = FirebaseAuth.getInstance().also { auth ->
-                updateFromUser(auth.currentUser)
+                updateState(auth.currentUser)
                 auth.addAuthStateListener { updatedAuth ->
-                    updateFromUser(updatedAuth.currentUser)
+                    updateState(updatedAuth.currentUser)
                 }
             }
         } catch (e: Exception) {
             Log.w(tag, "Firebase initialization warning: ${e.message}")
-            // Fall back to clean logged-out state
+            updateState(null)
+        }
+    }
+
+    private fun updateState(firebaseUser: FirebaseUser?) {
+        if (firebaseUser != null && !firebaseUser.email.isNullOrBlank()) {
+            _authState.value = AuthState.GmailUser(
+                uid = firebaseUser.uid,
+                email = firebaseUser.email ?: "",
+                displayName = firebaseUser.displayName ?: firebaseUser.email?.substringBefore('@'),
+            )
+        } else if (preferences.isApiKeySession.value && preferences.isApiKeyConfigured()) {
+            _authState.value = AuthState.ApiKeyUser(preferences.getMaskedApiKey())
+        } else {
             _authState.value = AuthState.LoggedOut
         }
     }
 
-    private fun updateFromUser(user: FirebaseUser?) {
-        if (user != null) {
-            _authState.value = AuthState.LoggedIn(
-                uid = user.uid,
-                email = user.email,
-                isAnonymous = user.isAnonymous,
-                displayName = user.displayName ?: if (user.isAnonymous) "Guest Listener" else user.email?.substringBefore('@'),
-            )
-        } else if (_authState.value !is AuthState.LoggedIn) {
-            _authState.value = AuthState.LoggedOut
-        }
-    }
-
-    fun signInAnonymously(onComplete: (Boolean, String?) -> Unit) {
-        val auth = firebaseAuth
-        if (auth == null) {
-            // Local guest fallback mode
-            _authState.value = AuthState.LoggedIn(
-                uid = "guest_local_${System.currentTimeMillis()}",
-                email = null,
-                isAnonymous = true,
-                displayName = "Guest Listener",
-            )
-            onComplete(true, null)
-            return
-        }
-
-        _authState.value = AuthState.Loading
-        auth.signInAnonymously()
-            .addOnSuccessListener { result ->
-                val user = result.user
-                updateFromUser(user)
-                onComplete(true, null)
-            }
-            .addOnFailureListener { ex ->
-                Log.w(tag, "Firebase anonymous sign-in failed, activating local guest: ${ex.message}")
-                // Graceful fallback to local guest session so user is never blocked
-                _authState.value = AuthState.LoggedIn(
-                    uid = "guest_local_${System.currentTimeMillis()}",
-                    email = null,
-                    isAnonymous = true,
-                    displayName = "Guest Listener",
-                )
-                onComplete(true, null)
-            }
-    }
-
-    fun signInWithEmail(email: String, pass: String, onComplete: (Boolean, String?) -> Unit) {
+    fun signInWithGmail(rawEmail: String, pass: String, onComplete: (Boolean, String?) -> Unit) {
         val auth = firebaseAuth
         if (auth == null) {
             val err = "Firebase services not initialized"
@@ -105,18 +74,19 @@ class FirebaseAuthManager(private val context: Context) {
             return
         }
 
-        val cleanEmail = email.trim()
-        if (cleanEmail.isBlank() || pass.isBlank()) {
-            val err = "Email and password cannot be empty"
+        val email = formatGmailAddress(rawEmail)
+        if (email.isBlank() || pass.isBlank()) {
+            val err = "Please enter your Gmail address and password"
             _authState.value = AuthState.Error(err)
             onComplete(false, err)
             return
         }
 
         _authState.value = AuthState.Loading
-        auth.signInWithEmailAndPassword(cleanEmail, pass)
+        auth.signInWithEmailAndPassword(email, pass)
             .addOnSuccessListener { result ->
-                updateFromUser(result.user)
+                preferences.setApiKeySessionActive(false)
+                updateState(result.user)
                 onComplete(true, null)
             }
             .addOnFailureListener { ex ->
@@ -126,7 +96,7 @@ class FirebaseAuthManager(private val context: Context) {
             }
     }
 
-    fun signUpWithEmail(email: String, pass: String, onComplete: (Boolean, String?) -> Unit) {
+    fun signUpWithGmail(rawEmail: String, pass: String, onComplete: (Boolean, String?) -> Unit) {
         val auth = firebaseAuth
         if (auth == null) {
             val err = "Firebase services not initialized"
@@ -135,25 +105,45 @@ class FirebaseAuthManager(private val context: Context) {
             return
         }
 
-        val cleanEmail = email.trim()
-        if (cleanEmail.isBlank() || pass.length < 6) {
-            val err = "Please provide a valid email and password (minimum 6 characters)"
+        val email = formatGmailAddress(rawEmail)
+        if (email.isBlank() || pass.length < 6) {
+            val err = "Please enter a valid Gmail address and password (at least 6 characters)"
             _authState.value = AuthState.Error(err)
             onComplete(false, err)
             return
         }
 
         _authState.value = AuthState.Loading
-        auth.createUserWithEmailAndPassword(cleanEmail, pass)
+        auth.createUserWithEmailAndPassword(email, pass)
             .addOnSuccessListener { result ->
-                updateFromUser(result.user)
+                preferences.setApiKeySessionActive(false)
+                updateState(result.user)
                 onComplete(true, null)
             }
             .addOnFailureListener { ex ->
-                val msg = ex.localizedMessage ?: "Registration failed"
+                val msg = ex.localizedMessage ?: "Account creation failed"
                 _authState.value = AuthState.Error(msg)
                 onComplete(false, msg)
             }
+    }
+
+    fun loginWithApiKey(apiKey: String, onComplete: (Boolean, String?) -> Unit) {
+        val cleanKey = apiKey.trim()
+        if (cleanKey.isBlank()) {
+            val err = "API Key cannot be empty"
+            _authState.value = AuthState.Error(err)
+            onComplete(false, err)
+            return
+        }
+
+        preferences.setCustomApiKey(cleanKey)
+        preferences.setApiKeySessionActive(true)
+        try {
+            firebaseAuth?.signOut()
+        } catch (_: Exception) {
+        }
+        _authState.value = AuthState.ApiKeyUser(preferences.getMaskedApiKey())
+        onComplete(true, null)
     }
 
     fun signOut() {
@@ -161,9 +151,20 @@ class FirebaseAuthManager(private val context: Context) {
             firebaseAuth?.signOut()
         } catch (_: Exception) {
         }
+        preferences.setApiKeySessionActive(false)
         _authState.value = AuthState.LoggedOut
     }
 
-    val currentUser: AuthState.LoggedIn?
-        get() = _authState.value as? AuthState.LoggedIn
+    fun isAuthenticated(): Boolean {
+        return _authState.value is AuthState.GmailUser || _authState.value is AuthState.ApiKeyUser
+    }
+
+    private fun formatGmailAddress(input: String): String {
+        val trimmed = input.trim()
+        if (trimmed.isEmpty()) return ""
+        if (!trimmed.contains("@")) {
+            return "$trimmed@gmail.com"
+        }
+        return trimmed
+    }
 }

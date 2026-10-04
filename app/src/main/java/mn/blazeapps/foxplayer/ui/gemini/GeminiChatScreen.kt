@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -51,10 +50,14 @@ fun GeminiChatScreen(
     val isContextEnabled by viewModel.isContextEnabled.collectAsStateWithLifecycle()
     val authState by viewModel.authState.collectAsStateWithLifecycle()
     val customApiKey by viewModel.customApiKey.collectAsStateWithLifecycle()
+    val selectedModel by viewModel.selectedModel.collectAsStateWithLifecycle()
+    val availableModels by viewModel.availableModels.collectAsStateWithLifecycle()
+    val isFetchingModels by viewModel.isFetchingModels.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
 
     var inputText by remember { mutableStateOf("") }
     var showAuthSheet by remember { mutableStateOf(false) }
+    var showModelSelector by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
     val isDark = MaterialTheme.colorScheme.background == BgDeep
@@ -96,11 +99,26 @@ fun GeminiChatScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
                             )
-                            Text(
-                                "Gemini 1.5 Flash",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { showModelSelector = true }
+                                    .padding(horizontal = 2.dp, vertical = 1.dp),
+                            ) {
+                                Text(
+                                    selectedModel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                                )
+                                Icon(
+                                    Icons.Default.ArrowDropDown,
+                                    contentDescription = "Select Model",
+                                    tint = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                            }
                         }
                     }
                 },
@@ -130,19 +148,22 @@ fun GeminiChatScreen(
                         ) {
                             Icon(
                                 when (authState) {
-                                    is AuthState.LoggedIn -> if ((authState as AuthState.LoggedIn).isAnonymous) Icons.Default.PersonOutline else Icons.Default.CheckCircle
+                                    is AuthState.GmailUser -> Icons.Default.Email
+                                    is AuthState.ApiKeyUser -> Icons.Default.Key
                                     else -> Icons.Default.AccountCircle
                                 },
                                 contentDescription = null,
                                 tint = when (authState) {
-                                    is AuthState.LoggedIn -> if ((authState as AuthState.LoggedIn).isAnonymous) ColorOrangeLight else Color(0xFF22C55E)
+                                    is AuthState.GmailUser -> ColorOrangeLight
+                                    is AuthState.ApiKeyUser -> Color(0xFF22C55E)
                                     else -> if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant
                                 },
                                 modifier = Modifier.size(16.dp),
                             )
                             Text(
                                 when (authState) {
-                                    is AuthState.LoggedIn -> (authState as AuthState.LoggedIn).displayName ?: "Signed In"
+                                    is AuthState.GmailUser -> (authState as AuthState.GmailUser).displayName ?: (authState as AuthState.GmailUser).email.substringBefore('@')
+                                    is AuthState.ApiKeyUser -> "API Key"
                                     else -> "Sign In"
                                 },
                                 style = MaterialTheme.typography.labelMedium,
@@ -331,7 +352,7 @@ fun GeminiChatScreen(
                         onValueChange = { inputText = it },
                         placeholder = {
                             Text(
-                                "Ask Gemini about plot, characters...",
+                                "Ask $selectedModel about plot, lore...",
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                         },
@@ -346,7 +367,7 @@ fun GeminiChatScreen(
 
                     IconButton(
                         onClick = {
-                            if (!viewModel.apiKeyConfigured) {
+                            if (!viewModel.isAuthenticated) {
                                 showAuthSheet = true
                             } else {
                                 val textToSend = inputText
@@ -390,12 +411,22 @@ fun GeminiChatScreen(
         AuthBottomSheet(
             authState = authState,
             customApiKey = customApiKey,
-            onApiKeyChange = viewModel::updateApiKey,
-            onSignInGuest = { viewModel.signInAnonymously() },
-            onSignInEmail = viewModel::signInWithEmail,
-            onSignUpEmail = viewModel::signUpWithEmail,
+            onLoginWithApiKey = viewModel::loginWithApiKey,
+            onSignInGmail = viewModel::signInWithGmail,
+            onSignUpGmail = viewModel::signUpWithGmail,
             onSignOut = viewModel::signOut,
             onDismiss = { showAuthSheet = false },
+        )
+    }
+
+    if (showModelSelector) {
+        ModelSelectorBottomSheet(
+            availableModels = availableModels,
+            selectedModelId = selectedModel,
+            isRefreshing = isFetchingModels,
+            onSelectModel = viewModel::selectModel,
+            onRefreshModels = viewModel::refreshAvailableModels,
+            onDismiss = { showModelSelector = false },
         )
     }
 }
