@@ -52,6 +52,7 @@ import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import mn.blazeapps.foxplayer.data.ai.AiChatMessage
+import mn.blazeapps.foxplayer.data.ai.ChatQueryScope
 import mn.blazeapps.foxplayer.data.ai.ChatSender
 import mn.blazeapps.foxplayer.data.ai.ChatSource
 import mn.blazeapps.foxplayer.data.ai.LocalChatEngineMode
@@ -61,7 +62,7 @@ import mn.blazeapps.foxplayer.ui.theme.*
 fun BookAiChatDialog(
     messages: List<AiChatMessage>,
     isGenerating: Boolean,
-    onSendMessage: (String) -> Unit,
+    onSendMessage: (String, ChatQueryScope) -> Unit,
     onClearChat: () -> Unit,
     onAddBookmarkNote: (String) -> Unit = {},
     engineMode: LocalChatEngineMode = LocalChatEngineMode.FAST_LOCAL,
@@ -69,6 +70,7 @@ fun BookAiChatDialog(
 ) {
     val isDark = MaterialTheme.colorScheme.background == BgDeep
     var inputText by remember { mutableStateOf("") }
+    var selectedScope by remember { mutableStateOf<ChatQueryScope>(ChatQueryScope.AUTO) }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -154,45 +156,83 @@ fun BookAiChatDialog(
 
                 Spacer(Modifier.height(8.dp))
 
-                // Action row: single internal notes filter + optional clear chat
+                // Scope Filter: Auto vs General (Web & AI) vs Bookmark Notes
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    SuggestionChip(
-                        onClick = { onSendMessage("Search my bookmark notes") },
-                        label = { Text("📝 Search Notes", fontSize = 12.sp, fontWeight = FontWeight.Medium) },
-                        icon = {
-                            Icon(
-                                Icons.Default.Bookmark,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp),
-                                tint = ColorBlueVioletLight,
-                            )
-                        },
-                        colors = SuggestionChipDefaults.suggestionChipColors(
-                            containerColor = if (isDark) GlassBgStrong else MaterialTheme.colorScheme.surfaceVariant,
-                            labelColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
+                    FilterChip(
+                        selected = selectedScope == ChatQueryScope.AUTO,
+                        onClick = { selectedScope = ChatQueryScope.AUTO },
+                        label = { Text("⚡ Auto", fontSize = 11.sp, fontWeight = if (selectedScope == ChatQueryScope.AUTO) FontWeight.Bold else FontWeight.Normal) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = ColorBlueViolet,
+                            selectedLabelColor = Color.White,
+                            containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant,
+                            labelColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurface,
                         ),
-                        border = SuggestionChipDefaults.suggestionChipBorder(
+                        border = FilterChipDefaults.filterChipBorder(
                             enabled = true,
+                            selected = selectedScope == ChatQueryScope.AUTO,
                             borderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
+                            selectedBorderColor = ColorBlueViolet,
                         ),
+                        shape = RoundedCornerShape(14.dp),
                     )
+                    FilterChip(
+                        selected = selectedScope == ChatQueryScope.GENERAL,
+                        onClick = { selectedScope = ChatQueryScope.GENERAL },
+                        label = { Text("🌐 General (Web & AI)", fontSize = 11.sp, fontWeight = if (selectedScope == ChatQueryScope.GENERAL) FontWeight.Bold else FontWeight.Normal) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = ColorBlueViolet,
+                            selectedLabelColor = Color.White,
+                            containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant,
+                            labelColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurface,
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = selectedScope == ChatQueryScope.GENERAL,
+                            borderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
+                            selectedBorderColor = ColorBlueViolet,
+                        ),
+                        shape = RoundedCornerShape(14.dp),
+                    )
+                    FilterChip(
+                        selected = selectedScope == ChatQueryScope.BOOKMARK_NOTES,
+                        onClick = { selectedScope = ChatQueryScope.BOOKMARK_NOTES },
+                        label = { Text("📝 Bookmark Notes", fontSize = 11.sp, fontWeight = if (selectedScope == ChatQueryScope.BOOKMARK_NOTES) FontWeight.Bold else FontWeight.Normal) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = ColorOrange,
+                            selectedLabelColor = Color.White,
+                            containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceVariant,
+                            labelColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurface,
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = selectedScope == ChatQueryScope.BOOKMARK_NOTES,
+                            borderColor = if (isDark) GlassBorder else MaterialTheme.colorScheme.outline,
+                            selectedBorderColor = ColorOrange,
+                        ),
+                        shape = RoundedCornerShape(14.dp),
+                    )
+
+                    Spacer(Modifier.weight(1f))
 
                     if (messages.isNotEmpty()) {
                         TextButton(
                             onClick = onClearChat,
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                         ) {
                             Icon(
                                 Icons.Default.Clear,
                                 contentDescription = "Clear Chat",
-                                modifier = Modifier.size(13.dp),
+                                modifier = Modifier.size(12.dp),
                                 tint = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
                             )
-                            Spacer(Modifier.width(4.dp))
+                            Spacer(Modifier.width(2.dp))
                             Text(
                                 "Clear",
                                 fontSize = 11.sp,
@@ -257,7 +297,11 @@ fun BookAiChatDialog(
                         onValueChange = { inputText = it },
                         placeholder = {
                             Text(
-                                "Search notes or ask anything online...",
+                                when (selectedScope) {
+                                    ChatQueryScope.GENERAL -> "Ask anything with live web search & AI..."
+                                    ChatQueryScope.BOOKMARK_NOTES -> "Search bookmark notes in this audiobook..."
+                                    ChatQueryScope.AUTO -> "Search notes or ask anything with web search & AI..."
+                                },
                                 fontSize = 13.sp,
                                 color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
                             )
@@ -279,7 +323,7 @@ fun BookAiChatDialog(
                             val query = inputText.trim()
                             if (query.isNotBlank()) {
                                 inputText = ""
-                                onSendMessage(query)
+                                onSendMessage(query, selectedScope)
                             }
                         }),
                     )
@@ -289,7 +333,7 @@ fun BookAiChatDialog(
                             val query = inputText.trim()
                             if (query.isNotBlank()) {
                                 inputText = ""
-                                onSendMessage(query)
+                                onSendMessage(query, selectedScope)
                             }
                         },
                         enabled = !isGenerating && inputText.isNotBlank(),
@@ -315,6 +359,27 @@ fun BookAiChatDialog(
             }
         }
     }
+}
+
+@Composable
+fun BookAiChatDialog(
+    messages: List<AiChatMessage>,
+    isGenerating: Boolean,
+    onSendMessage: (String) -> Unit,
+    onClearChat: () -> Unit,
+    onAddBookmarkNote: (String) -> Unit = {},
+    engineMode: LocalChatEngineMode = LocalChatEngineMode.FAST_LOCAL,
+    onDismiss: () -> Unit,
+) {
+    BookAiChatDialog(
+        messages = messages,
+        isGenerating = isGenerating,
+        onSendMessage = { query, _ -> onSendMessage(query) },
+        onClearChat = onClearChat,
+        onAddBookmarkNote = onAddBookmarkNote,
+        engineMode = engineMode,
+        onDismiss = onDismiss,
+    )
 }
 
 @Composable
@@ -721,12 +786,12 @@ fun SourceBadge(
     isDark: Boolean,
 ) {
     val (badgeBg, badgeText) = when (src.type) {
-        "Wikipedia" -> Color(0x2E0284C7) to Color(0xFF38BDF8)
+        "Wikipedia", "Live Web Search" -> Color(0x2E0284C7) to Color(0xFF38BDF8)
         "DuckDuckGo" -> Color(0x2EE25C26) to Color(0xFFFF8B53)
         "Brave Search" -> Color(0x2EFB542B) to Color(0xFFFF7A59)
         "Bookmarks" -> Color(0x2E10B981) to Color(0xFF6EE7B7)
         "On-Device Neural Model" -> ColorPurpleDim to ColorPurple
-        "Microsoft Foundry Local", "Foundry Local Fallback" -> Color(0x2E10B981) to Color(0xFF34D399)
+        "Microsoft Foundry Local", "Foundry Local Fallback", "Foundry Local IPC" -> Color(0x2E10B981) to Color(0xFF34D399)
         else -> ColorOrangeDim to ColorOrangeLight
     }
 

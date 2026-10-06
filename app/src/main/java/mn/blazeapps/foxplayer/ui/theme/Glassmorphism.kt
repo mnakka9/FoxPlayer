@@ -42,6 +42,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 /**
  * Ambient background container reproducing the BlazeIn multi-point radial mesh glow:
@@ -432,3 +445,86 @@ fun GlassTopAppBar(
         }
     }
 }
+
+/**
+ * Smooth, interactive vertical scrollbar for LazyColumn lists
+ */
+@Composable
+fun VerticalListScrollbar(
+    listState: LazyListState,
+    coroutineScope: CoroutineScope,
+    isDark: Boolean = true,
+    modifier: Modifier = Modifier,
+) {
+    var isDragging by remember { mutableStateOf(false) }
+
+    BoxWithConstraints(modifier = modifier) {
+        val totalItems = listState.layoutInfo.totalItemsCount
+        val visibleItems = listState.layoutInfo.visibleItemsInfo
+        val trackHeightPx = constraints.maxHeight.toFloat()
+
+        if (totalItems > 1 && visibleItems.isNotEmpty() && trackHeightPx > 0) {
+            val visibleCount = visibleItems.size
+            val thumbHeightFraction = (visibleCount.toFloat() / totalItems).coerceIn(0.10f, 1f)
+            val thumbHeightPx = trackHeightPx * thumbHeightFraction
+
+            val firstVisibleIndex = listState.firstVisibleItemIndex
+            val maxIndex = (totalItems - visibleCount).coerceAtLeast(1)
+            val scrollProgress = (firstVisibleIndex.toFloat() / maxIndex).coerceIn(0f, 1f)
+            val thumbOffsetPx = (trackHeightPx - thumbHeightPx) * scrollProgress
+
+            // Interactive track
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (isDark) Color(0x1AFFFFFF) else Color(0x1A000000))
+                    .pointerInput(totalItems) {
+                        detectTapGestures { offset ->
+                            val touchRatio = (offset.y / trackHeightPx).coerceIn(0f, 1f)
+                            val targetIndex = (touchRatio * (totalItems - 1)).toInt()
+                            coroutineScope.launch {
+                                listState.scrollToItem(targetIndex)
+                            }
+                        }
+                    }
+                    .pointerInput(totalItems) {
+                        detectDragGestures(
+                            onDragStart = { isDragging = true },
+                            onDragEnd = { isDragging = false },
+                            onDragCancel = { isDragging = false },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                val touchRatio = (change.position.y / trackHeightPx).coerceIn(0f, 1f)
+                                val targetIndex = (touchRatio * (totalItems - 1)).toInt()
+                                coroutineScope.launch {
+                                    listState.scrollToItem(targetIndex)
+                                }
+                            }
+                        )
+                    }
+            ) {
+                // Draggable thumb indicator
+                val density = LocalDensity.current
+                val thumbOffsetDp = with(density) { thumbOffsetPx.toDp() }
+                val thumbHeightDp = with(density) { thumbHeightPx.toDp() }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .offset(y = thumbOffsetDp)
+                        .height(thumbHeightDp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            if (isDragging) {
+                                Brush.verticalGradient(listOf(ColorOrange, ColorOrangeLight))
+                            } else {
+                                Brush.verticalGradient(listOf(ColorBlueVioletLight, ColorBlueViolet))
+                            }
+                        ),
+                )
+            }
+        }
+    }
+}
+

@@ -66,6 +66,51 @@ fun SettingsDialog(
     var connectionStatusText by remember { mutableStateOf<String?>(null) }
     var isConnectionSuccess by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showFoundryDeleteConfirm by remember { mutableStateOf(false) }
+
+    val foundryDownloadState by FoundryIpcManager.downloadState.collectAsState()
+    var isFoundryModelCached by remember { mutableStateOf(false) }
+    var foundryModelEstimatedSizeBytes by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(foundryModel, isFoundryAppInstalled) {
+        if (isFoundryAppInstalled && FoundryIpcManager.isSupportedOs()) {
+            isFoundryModelCached = FoundryIpcManager.isModelCached(context, foundryModel)
+            foundryModelEstimatedSizeBytes = FoundryIpcManager.getModelSizeBytes(context, foundryModel)
+        } else {
+            isFoundryModelCached = false
+        }
+    }
+
+    LaunchedEffect(foundryDownloadState) {
+        if (foundryDownloadState is FoundryIpcManager.FoundryDownloadState.Ready &&
+            FoundryIpcManager.isSameModel((foundryDownloadState as FoundryIpcManager.FoundryDownloadState.Ready).modelAlias, foundryModel)
+        ) {
+            isFoundryModelCached = true
+            foundryModelEstimatedSizeBytes = FoundryIpcManager.getModelSizeBytes(context, foundryModel)
+        }
+    }
+
+    var dynamicCatalogModels by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    LaunchedEffect(isFoundryAppInstalled) {
+        if (isFoundryAppInstalled && FoundryIpcManager.isSupportedOs()) {
+            try {
+                val status = FoundryIpcManager.checkStatus(context)
+                val combined = (status.cachedModels + status.models).distinct()
+                if (combined.isNotEmpty()) {
+                    dynamicCatalogModels = combined.map { alias ->
+                        val label = when {
+                            alias.contains("0.5b", ignoreCase = true) -> "Qwen 2.5 0.5B ($alias)"
+                            alias.contains("1.5b", ignoreCase = true) -> "Qwen 2.5 1.5B ($alias)"
+                            alias.contains("phi", ignoreCase = true) -> "Microsoft Phi-3.5-mini ($alias)"
+                            alias.contains("coder", ignoreCase = true) -> "Qwen 2.5 Coder ($alias)"
+                            else -> alias
+                        }
+                        alias to label
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -668,17 +713,27 @@ fun SettingsDialog(
                                                 expanded = showFoundryMenu,
                                                 onDismissRequest = { showFoundryMenu = false },
                                             ) {
-                                                listOf(
-                                                    "qwen2.5-0.5b-instruct" to "Qwen 2.5 0.5B (Recommended · Fast, ~350MB)",
+                                                val defaultModels = listOf(
+                                                    "qwen2.5-0.5b" to "Qwen 2.5 0.5B (Recommended · Fast, ~350MB)",
                                                     "phi-3.5-mini" to "Microsoft Phi-3.5-mini (Deep Reasoning, ~1.8GB)",
-                                                    "qwen2.5-1.5b-instruct" to "Qwen 2.5 1.5B (Balanced, ~900MB)",
+                                                    "qwen2.5-1.5b" to "Qwen 2.5 1.5B (Balanced, ~900MB)",
                                                     "qwen2.5-coder-0.5b" to "Qwen 2.5 Coder 0.5B (Compact)",
-                                                ).forEach { (id, label) ->
+                                                )
+                                                val availableModels = if (dynamicCatalogModels.isNotEmpty()) {
+                                                    (dynamicCatalogModels + defaultModels).distinctBy { (id, _) ->
+                                                        id.lowercase().removeSuffix("-instruct")
+                                                    }
+                                                } else {
+                                                    defaultModels
+                                                }
+
+                                                availableModels.forEach { (id, label) ->
+                                                    val isSelected = FoundryIpcManager.isSameModel(id, foundryModel)
                                                     DropdownMenuItem(
                                                         text = {
                                                             Text(
                                                                 label,
-                                                                fontWeight = if (id == foundryModel) FontWeight.Bold else FontWeight.Normal,
+                                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                                             )
                                                         },
                                                         onClick = {
@@ -686,11 +741,268 @@ fun SettingsDialog(
                                                             showFoundryMenu = false
                                                         },
                                                         leadingIcon = {
-                                                            if (id == foundryModel) {
+                                                            if (isSelected) {
                                                                 Icon(Icons.Default.Check, contentDescription = null, tint = ColorBlueVioletLight)
                                                             }
                                                         },
                                                     )
+                                                }
+                                             }
+                                        }
+
+                                        // Foundry Model Download & Cache Management UI
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(if (isDark) Color(0x331E1B4B) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                                .border(
+                                                    1.dp,
+                                                    if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                                    RoundedCornerShape(12.dp),
+                                                )
+                                                .padding(12.dp),
+                                        ) {
+                                            when {
+                                                // State 1: Currently Downloading
+                                                foundryDownloadState is FoundryIpcManager.FoundryDownloadState.Downloading &&
+                                                    FoundryIpcManager.isSameModel((foundryDownloadState as FoundryIpcManager.FoundryDownloadState.Downloading).modelAlias, foundryModel) -> {
+                                                    val dl = foundryDownloadState as FoundryIpcManager.FoundryDownloadState.Downloading
+                                                    Column(
+                                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                        ) {
+                                                            Row(
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                            ) {
+                                                                CircularProgressIndicator(
+                                                                    modifier = Modifier.size(14.dp),
+                                                                    strokeWidth = 2.dp,
+                                                                    color = ColorBlueVioletLight,
+                                                                )
+                                                                Text(
+                                                                    "Downloading $foundryModel...",
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = if (isDark) ColorBlueVioletLight else MaterialTheme.colorScheme.primary,
+                                                                )
+                                                            }
+                                                            Text(
+                                                                "${(dl.progress * 100).toInt()}%",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = ColorBlueVioletLight,
+                                                            )
+                                                        }
+
+                                                        LinearProgressIndicator(
+                                                            progress = { dl.progress },
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .height(8.dp)
+                                                                .clip(RoundedCornerShape(4.dp)),
+                                                            color = ColorBlueVioletLight,
+                                                            trackColor = if (isDark) Color(0x338B5CF6) else MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                        )
+
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                        ) {
+                                                            Text(
+                                                                "Downloading via Foundry Local background service",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                                                            )
+                                                            TextButton(
+                                                                onClick = { FoundryIpcManager.cancelDownload() },
+                                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                                            ) {
+                                                                Text("Cancel", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                // State 2: Download Failed / Error
+                                                foundryDownloadState is FoundryIpcManager.FoundryDownloadState.Error &&
+                                                    FoundryIpcManager.isSameModel((foundryDownloadState as FoundryIpcManager.FoundryDownloadState.Error).modelAlias, foundryModel) -> {
+                                                    val err = foundryDownloadState as FoundryIpcManager.FoundryDownloadState.Error
+                                                    Column(
+                                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                        ) {
+                                                            Icon(
+                                                                Icons.Default.ErrorOutline,
+                                                                contentDescription = null,
+                                                                tint = MaterialTheme.colorScheme.error,
+                                                                modifier = Modifier.size(16.dp),
+                                                            )
+                                                            Text(
+                                                                "Download Failed",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = MaterialTheme.colorScheme.error,
+                                                            )
+                                                        }
+                                                        Text(
+                                                            err.message,
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.9f),
+                                                        )
+                                                        Button(
+                                                            onClick = {
+                                                                FoundryIpcManager.startDownload(context, foundryModel, forceRedownload = false)
+                                                            },
+                                                            colors = ButtonDefaults.buttonColors(
+                                                                containerColor = ColorBlueViolet,
+                                                                contentColor = Color.White,
+                                                            ),
+                                                            shape = RoundedCornerShape(10.dp),
+                                                            modifier = Modifier.align(Alignment.End),
+                                                        ) {
+                                                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                            Spacer(Modifier.width(6.dp))
+                                                            Text("Retry Download")
+                                                        }
+                                                    }
+                                                }
+
+                                                // State 3: Model is Cached / Downloaded & Ready
+                                                isFoundryModelCached -> {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                            modifier = Modifier.weight(1f),
+                                                        ) {
+                                                            Icon(
+                                                                Icons.Default.CheckCircle,
+                                                                contentDescription = null,
+                                                                tint = Color(0xFF34D399),
+                                                                modifier = Modifier.size(18.dp),
+                                                            )
+                                                            Column {
+                                                                Text(
+                                                                    "Model Cached & Ready",
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = if (isDark) Color(0xFF34D399) else Color(0xFF059669),
+                                                                )
+                                                                val sizeStr = if (foundryModelEstimatedSizeBytes > 0) {
+                                                                    "${foundryModelEstimatedSizeBytes / (1024 * 1024)} MB"
+                                                                } else {
+                                                                    "Downloaded"
+                                                                }
+                                                                Text(
+                                                                    "Storage: $sizeStr in Foundry Local service",
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                                                                )
+                                                            }
+                                                        }
+
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                            TextButton(
+                                                                onClick = { showFoundryDeleteConfirm = true },
+                                                                colors = ButtonDefaults.textButtonColors(
+                                                                    contentColor = MaterialTheme.colorScheme.error,
+                                                                ),
+                                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                                            ) {
+                                                                Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                                Spacer(Modifier.width(4.dp))
+                                                                Text("Delete", fontSize = 11.sp)
+                                                            }
+                                                            TextButton(
+                                                                onClick = {
+                                                                    FoundryIpcManager.startDownload(context, foundryModel, forceRedownload = true)
+                                                                },
+                                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                                            ) {
+                                                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp), tint = ColorBlueVioletLight)
+                                                                Spacer(Modifier.width(4.dp))
+                                                                Text("Re-fetch", fontSize = 11.sp, color = ColorBlueVioletLight)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                // State 4: Not Cached / Not Downloaded yet
+                                                else -> {
+                                                    Column(
+                                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                        ) {
+                                                            Column(modifier = Modifier.weight(1f)) {
+                                                                Text(
+                                                                    "Status: Model Not Downloaded",
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    fontWeight = FontWeight.SemiBold,
+                                                                    color = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.error,
+                                                                )
+                                                                val estSize = if (foundryModelEstimatedSizeBytes > 0) {
+                                                                    "~${foundryModelEstimatedSizeBytes / (1024 * 1024)} MB"
+                                                                } else {
+                                                                    when {
+                                                                        foundryModel.contains("phi", ignoreCase = true) -> "~1.8 GB"
+                                                                        foundryModel.contains("1.5b", ignoreCase = true) -> "~900 MB"
+                                                                        else -> "~350 MB"
+                                                                    }
+                                                                }
+                                                                Text(
+                                                                    "Size: $estSize · Required for on-device inference",
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                                                                )
+                                                            }
+
+                                                            Button(
+                                                                onClick = {
+                                                                    if (isFoundryAppInstalled) {
+                                                                        FoundryIpcManager.startDownload(context, foundryModel, forceRedownload = false)
+                                                                    } else {
+                                                                        context.startActivity(FoundryIpcManager.createPlayStoreIntent())
+                                                                    }
+                                                                },
+                                                                colors = ButtonDefaults.buttonColors(
+                                                                    containerColor = ColorBlueViolet,
+                                                                    contentColor = Color.White,
+                                                                ),
+                                                                shape = RoundedCornerShape(10.dp),
+                                                            ) {
+                                                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                                Spacer(Modifier.width(6.dp))
+                                                                Text("Download Model", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                            }
+                                                        }
+
+                                                        Text(
+                                                            "💡 The Foundry Local app acts as an execution service. FoxPlayer triggers the download directly via IPC into the service cache.",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = if (isDark) TextMuted else MaterialTheme.colorScheme.outline,
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -744,11 +1056,14 @@ fun SettingsDialog(
                                                             val status = onTestFoundryConnection()
                                                             isTestingConnection = false
                                                             isConnectionSuccess = status.isSuccess
+                                                            if (status.isSuccess) {
+                                                                isFoundryModelCached = FoundryIpcManager.isModelCached(context, foundryModel)
+                                                                foundryModelEstimatedSizeBytes = FoundryIpcManager.getModelSizeBytes(context, foundryModel)
+                                                            }
                                                             connectionStatusText = if (status.isSuccess) {
-                                                                val modelsInfo = if (status.models.isNotEmpty()) " (${status.models.size} models)" else ""
-                                                                "Active (${status.latencyMs}ms)$modelsInfo"
+                                                                status.message
                                                             } else {
-                                                                "Offline: ${status.message.take(24)}"
+                                                                "Offline: ${status.message.take(28)}"
                                                             }
                                                         }
                                                     }
@@ -1116,7 +1431,7 @@ fun SettingsDialog(
                                 verticalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 Text(
-                                    "FoxPlayer v1.1.0",
+                                    "FoxPlayer v${mn.blazeapps.foxplayer.BuildConfig.VERSION_NAME}",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1169,6 +1484,52 @@ fun SettingsDialog(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel", color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+        )
+    }
+
+    // Foundry Model Delete Confirmation Dialog
+    if (showFoundryDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showFoundryDeleteConfirm = false },
+            containerColor = if (isDark) Color(0xF20D1230) else MaterialTheme.colorScheme.surface,
+            titleContentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+            textContentColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.border(
+                BorderStroke(1.dp, if (isDark) GlassBorder else MaterialTheme.colorScheme.outline),
+                RoundedCornerShape(20.dp),
+            ),
+            title = {
+                Text("Delete Model from Cache?", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text("This will remove '$foundryModel' from Microsoft Foundry Local service cache. You can re-download it at any time in Settings.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showFoundryDeleteConfirm = false
+                        coroutineScope.launch {
+                            val success = FoundryIpcManager.deleteModel(context, foundryModel)
+                            if (success) {
+                                isFoundryModelCached = false
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    Text("Delete Model", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFoundryDeleteConfirm = false }) {
                     Text("Cancel", color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },

@@ -366,7 +366,7 @@ fun LibraryScreen(
                             isSuccess = true,
                             latencyMs = ipcStatus.latencyMs,
                             models = ipcStatus.models.ifEmpty { listOf(foundryModel) },
-                            message = "IPC Connected (${ipcStatus.latencyMs}ms)",
+                            message = ipcStatus.message.ifBlank { "IPC Connected (${ipcStatus.latencyMs}ms)" },
                         )
                     } else if (ipcStatus.isAppInstalled) {
                         LocalLlmClient.ConnectionStatus(

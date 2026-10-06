@@ -30,7 +30,7 @@ class LocalLlmClient(
 
     companion object {
         const val DEFAULT_ENDPOINT = "http://127.0.0.1:8080/v1"
-        const val DEFAULT_MODEL = "qwen2.5-0.5b-instruct"
+        const val DEFAULT_MODEL = "qwen2.5-0.5b"
         private const val TAG = "FoxPlayer-LocalLLM"
 
         private fun logE(message: String, throwable: Throwable? = null) {

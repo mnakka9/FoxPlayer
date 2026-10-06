@@ -15,6 +15,7 @@ import kotlinx.coroutines.withContext
 import mn.blazeapps.foxplayer.data.ai.AiChatEngine
 import mn.blazeapps.foxplayer.data.ai.AiChatMessage
 import mn.blazeapps.foxplayer.data.ai.BookSeriesAndAuthorInfo
+import mn.blazeapps.foxplayer.data.ai.ChatQueryScope
 import mn.blazeapps.foxplayer.data.ai.LocalChatPreferences
 import mn.blazeapps.foxplayer.data.onnx.EnrichedBookMetadata
 import mn.blazeapps.foxplayer.data.onnx.OnnxBookMetadataEngine
@@ -308,10 +309,11 @@ class AudiobookRepository(
         bookId: Long,
         query: String,
         bookmarksList: List<BookmarkWithChapter>,
+        scope: ChatQueryScope = ChatQueryScope.AUTO,
     ): AiChatMessage = withContext(Dispatchers.IO) {
         val book = books.getBook(bookId)
         val chaps = chapters.getChapters(bookId)
-        aiChatEngine.processQuery(query, book, chaps, bookmarksList)
+        aiChatEngine.processQuery(query, book, chaps, bookmarksList, scope)
     }
 
     suspend fun fetchBookSeriesInfo(bookId: Long): BookSeriesAndAuthorInfo? = withContext(Dispatchers.IO) {

@@ -65,6 +65,12 @@ data class ParsedSeries(
     val overview: String? = null,
 )
 
+enum class ChatQueryScope(val displayName: String, val subtitle: String) {
+    AUTO("Auto", "Smart search across notes, book info & web"),
+    GENERAL("General (Web & AI)", "Live web search & AI knowledge"),
+    BOOKMARK_NOTES("Bookmark Notes", "Search bookmark notes in this book"),
+}
+
 class AiChatEngine(
     private val modelManager: OnnxModelManager? = null,
     private val onnxEngine: OnnxBookMetadataEngine? = null,
@@ -102,22 +108,33 @@ class AiChatEngine(
         book: BookEntity?,
         chapters: List<ChapterEntity>,
         bookmarks: List<BookmarkWithChapter>,
+        scope: ChatQueryScope = ChatQueryScope.AUTO,
     ): AiChatMessage = withContext(Dispatchers.IO) {
         val trimmed = query.trim()
         val lower = trimmed.lowercase()
 
-        // 1. Internal notes / bookmarks search
-        if (isNotesQuery(lower)) {
-            return@withContext handleInternalNotes(trimmed, lower, book, bookmarks)
-        }
+        when (scope) {
+            ChatQueryScope.BOOKMARK_NOTES -> {
+                return@withContext handleInternalNotes(trimmed, lower, book, bookmarks)
+            }
+            ChatQueryScope.GENERAL -> {
+                return@withContext searchWebAndSummarize(trimmed, book)
+            }
+            ChatQueryScope.AUTO -> {
+                // 1. Internal notes / bookmarks search
+                if (isNotesQuery(lower)) {
+                    return@withContext handleInternalNotes(trimmed, lower, book, bookmarks)
+                }
 
-        // 2. Direct audiobook metadata queries (Author, chapters, synopsis)
-        if (book != null && isBookMetadataQuery(lower)) {
-            return@withContext handleBookMetadata(lower, book, chapters)
-        }
+                // 2. Direct audiobook metadata queries (Author, chapters, synopsis)
+                if (book != null && isBookMetadataQuery(lower)) {
+                    return@withContext handleBookMetadata(lower, book, chapters)
+                }
 
-        // 3. Multi-engine search across Wikipedia, DuckDuckGo & Brave Search + Local LLM/ONNX synthesis
-        searchWebAndSummarize(trimmed, book)
+                // 3. Multi-engine search across Wikipedia, DuckDuckGo & Brave Search + Local LLM/ONNX synthesis
+                return@withContext searchWebAndSummarize(trimmed, book)
+            }
+        }
     }
 
     private fun isNotesQuery(lower: String): Boolean {
@@ -310,7 +327,7 @@ class AiChatEngine(
         query: String,
         book: BookEntity?,
     ): AiChatMessage = withContext(Dispatchers.IO) {
-        val cleanTopic = cleanSearchTopic(query)
+        val cleanTopic = cleanSearchTopic(query).ifBlank { query.trim() }
         val engineMode = localChatPreferences?.engineMode?.value ?: LocalChatEngineMode.FAST_LOCAL
         val foundryEndpoint = localChatPreferences?.foundryEndpoint?.value ?: LocalLlmClient.DEFAULT_ENDPOINT
         val foundryModel = localChatPreferences?.foundryModel?.value ?: LocalChatPreferences.DEFAULT_MODEL
@@ -335,6 +352,8 @@ class AiChatEngine(
                 }
             }
 
+            var lastFoundryError: String? = null
+
             // 1. Primary: Try Microsoft Foundry Local via Android IPC service app
             if (context != null && FoundryIpcManager.isSupportedOs() && FoundryIpcManager.isFoundryAppInstalled(context)) {
                 val ipcResult = FoundryIpcManager.chat(
@@ -346,14 +365,19 @@ class AiChatEngine(
                     liveKnowledgeContext = liveKnowledge.takeIf { it.isNotBlank() },
                 )
                 if (ipcResult.isSuccess && ipcResult.text.isNotBlank()) {
+                    val sources = mutableListOf(
+                        ChatSource("Foundry Local IPC", ipcResult.modelUsed.ifBlank { foundryModel }),
+                    )
+                    if (liveKnowledge.isNotBlank()) {
+                        sources.add(ChatSource("Live Web Search", "DuckDuckGo & Wikipedia & Brave"))
+                    }
                     return@withContext AiChatMessage(
                         sender = ChatSender.Assistant,
                         text = ipcResult.text,
-                        sources = listOf(
-                            ChatSource("Foundry Local IPC", ipcResult.modelUsed.ifBlank { foundryModel }),
-                            ChatSource("Live Knowledge Tools", "Wikipedia & Web Search"),
-                        ),
+                        sources = sources,
                     )
+                } else if (!ipcResult.isSuccess && !ipcResult.errorMessage.isNullOrBlank()) {
+                    lastFoundryError = ipcResult.errorMessage
                 }
             }
 
@@ -385,13 +409,16 @@ class AiChatEngine(
                 context != null && !FoundryIpcManager.isSupportedOs() -> {
                     "\n\n> ℹ️ *Microsoft Foundry Local requires Android 13+ (API 33). Response derived via Fast Local Search.*"
                 }
+                !lastFoundryError.isNullOrBlank() -> {
+                    "\n\n> ℹ️ *Microsoft Foundry Local: $lastFoundryError Falling back to Fast Local Search.*"
+                }
                 else -> {
                     "\n\n> ℹ️ *Microsoft Foundry Local service was not detected. Response derived via Fast Local Search. Ensure the Foundry Local app is running.*"
                 }
             }
             return@withContext fastResult.copy(
                 text = fastResult.text + fallbackNotice,
-                sources = fastResult.sources + listOf(ChatSource("Foundry Local Fallback", "Service Offline")),
+                sources = fastResult.sources + listOf(ChatSource("Foundry Local Fallback", if (!lastFoundryError.isNullOrBlank()) "Model Not Downloaded" else "Service Offline")),
             )
         } else {
             // Default Fast Local search engine (Wikipedia + DuckDuckGo + Brave + SmolLM2 ONNX)

@@ -296,5 +296,44 @@ class AiChatEngineTest {
         assertEquals("com.microsoft.foundrylocal.app", FoundryIpcManager.FOUNDRY_APP_PACKAGE)
         assertEquals("market://details?id=com.microsoft.foundrylocal.app", FoundryIpcManager.PLAY_STORE_MARKET_URI)
     }
+
+    @Test
+    fun testFoundryDownloadStateTransitions() {
+        val idle = FoundryIpcManager.FoundryDownloadState.Idle
+        val downloading = FoundryIpcManager.FoundryDownloadState.Downloading("qwen2.5-0.5b", 0.45f)
+        val ready = FoundryIpcManager.FoundryDownloadState.Ready("qwen2.5-0.5b")
+        val error = FoundryIpcManager.FoundryDownloadState.Error("qwen2.5-0.5b", "Network error")
+
+        assertEquals(FoundryIpcManager.FoundryDownloadState.Idle, idle)
+        assertEquals("qwen2.5-0.5b", downloading.modelAlias)
+        assertEquals(0.45f, downloading.progress, 0.001f)
+        assertEquals("qwen2.5-0.5b", ready.modelAlias)
+        assertEquals("Network error", error.message)
+    }
+
+    @Test
+    fun testFoundryIpcStatusWithCachedModels() {
+        val status = FoundryIpcManager.IpcStatus(
+            isSupportedOs = true,
+            isAppInstalled = true,
+            isConnected = true,
+            models = listOf("qwen2.5-0.5b", "phi-3.5-mini"),
+            cachedModels = listOf("qwen2.5-0.5b"),
+            loadedModels = emptyList(),
+            latencyMs = 12,
+            message = "Connected via IPC (12ms) · 1 model(s) downloaded",
+        )
+        assertTrue(status.isConnected)
+        assertEquals(1, status.cachedModels.size)
+        assertEquals("qwen2.5-0.5b", status.cachedModels[0])
+    }
+
+    @Test
+    fun testNormalizeModelAlias() {
+        assertEquals("qwen2.5-0.5b", FoundryIpcManager.normalizeModelAlias("qwen2.5-0.5b-instruct"))
+        assertEquals("qwen2.5-1.5b", FoundryIpcManager.normalizeModelAlias("qwen2.5-1.5b-instruct"))
+        assertEquals("qwen2.5-0.5b", FoundryIpcManager.normalizeModelAlias("qwen2.5-0.5b"))
+        assertEquals("phi-3.5-mini", FoundryIpcManager.normalizeModelAlias("phi-3.5-mini"))
+    }
 }
 

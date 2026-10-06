@@ -190,7 +190,8 @@ fun GeminiChatScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues),
+                .padding(paddingValues)
+                .imePadding(),
         ) {
             // Audiobook Context Banner
             viewModel.bookTitle?.let { title ->
@@ -338,7 +339,9 @@ fun GeminiChatScreen(
                 color = if (isDark) Color(0xF00A0F26) else MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.dp, if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant),
                 shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding(),
             ) {
                 Row(
                     modifier = Modifier

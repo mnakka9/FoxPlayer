@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import mn.blazeapps.foxplayer.data.ai.AiChatMessage
 import mn.blazeapps.foxplayer.data.ai.BookSeriesAndAuthorInfo
+import mn.blazeapps.foxplayer.data.ai.ChatQueryScope
 import mn.blazeapps.foxplayer.data.ai.ChatSender
 import mn.blazeapps.foxplayer.data.ai.ChatSource
 import kotlinx.coroutines.launch
@@ -103,7 +104,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun sendChatMessage(query: String) {
+    fun sendChatMessage(query: String, scope: ChatQueryScope = ChatQueryScope.AUTO) {
         val trimmed = query.trim()
         if (trimmed.isBlank() || isChatGenerating.value) return
         val id = bookId.value ?: return
@@ -121,6 +122,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
                     bookId = id,
                     query = trimmed,
                     bookmarksList = bookmarks.value,
+                    scope = scope,
                 )
                 chatMessages.value = chatMessages.value + response
             } catch (e: Exception) {

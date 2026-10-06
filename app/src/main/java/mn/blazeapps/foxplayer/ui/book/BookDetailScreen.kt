@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,7 +30,6 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Forum
@@ -72,6 +72,7 @@ import mn.blazeapps.foxplayer.ui.theme.SquircleIconBox
 import mn.blazeapps.foxplayer.ui.theme.TextMuted
 import mn.blazeapps.foxplayer.ui.theme.TextPrimary
 import mn.blazeapps.foxplayer.ui.theme.TextSecondary
+import mn.blazeapps.foxplayer.ui.theme.VerticalListScrollbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import mn.blazeapps.foxplayer.data.ai.LocalChatEngineMode
@@ -97,13 +98,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -204,7 +202,7 @@ fun BookDetailScreen(
                 title = {
                     Text(
                         book?.title ?: "FoxPlayer",
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
@@ -220,54 +218,7 @@ fun BookDetailScreen(
                         )
                     }
                 },
-                actions = {
-                    IconButton(onClick = { showEnrichDialog = true }) {
-                        Icon(
-                            Icons.Default.AutoAwesome,
-                            contentDescription = "Enrich with AI",
-                            tint = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    IconButton(onClick = { showChatDialog = true }) {
-                        Icon(
-                            Icons.Default.Forum,
-                            contentDescription = "AI Companion Chat",
-                            tint = if (showChatDialog) ColorOrange else if (isDark) ColorBlueVioletLight else MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    IconButton(onClick = { showInfoDialog = true }) {
-                        Icon(
-                            Icons.Default.Info,
-                            contentDescription = "Book Information & Series",
-                            tint = if (showInfoDialog) ColorOrange else if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    if (isGeminiChatEnabled) {
-                        IconButton(onClick = {
-                            context.startActivity(
-                                GeminiChatActivity.createIntent(
-                                    context = context,
-                                    bookId = book?.id,
-                                    bookTitle = book?.title,
-                                    bookAuthor = book?.author,
-                                )
-                            )
-                        }) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_gemini),
-                                contentDescription = "Gemini Cloud AI Companion",
-                                tint = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                    }
-                    IconButton(onClick = { showSettingsDialog = true }) {
-                        Icon(
-                            Icons.Default.Settings,
-                            contentDescription = "Settings",
-                            tint = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
+                actions = {},
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     titleContentColor = if (isDark) TextPrimary else MaterialTheme.colorScheme.onSurface,
@@ -283,6 +234,106 @@ fun BookDetailScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp),
         ) {
+            // Action buttons row below title
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val author = book?.author
+                if (!author.isNullOrBlank()) {
+                    Text(
+                        text = "by $author",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 8.dp),
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    GlassIconButton(
+                        onClick = { showEnrichDialog = true },
+                        size = 38.dp,
+                        contentColor = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                    ) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = "Enrich with AI",
+                            modifier = Modifier.size(19.dp),
+                        )
+                    }
+
+                    GlassIconButton(
+                        onClick = { showChatDialog = true },
+                        size = 38.dp,
+                        contentColor = if (showChatDialog) ColorOrange else if (isDark) ColorBlueVioletLight else MaterialTheme.colorScheme.primary,
+                    ) {
+                        Icon(
+                            Icons.Default.Forum,
+                            contentDescription = "AI Companion Chat",
+                            modifier = Modifier.size(19.dp),
+                        )
+                    }
+
+                    GlassIconButton(
+                        onClick = { showInfoDialog = true },
+                        size = 38.dp,
+                        contentColor = if (showInfoDialog) ColorOrange else if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                    ) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = "Book Information & Series",
+                            modifier = Modifier.size(19.dp),
+                        )
+                    }
+
+                    if (isGeminiChatEnabled) {
+                        GlassIconButton(
+                            onClick = {
+                                context.startActivity(
+                                    GeminiChatActivity.createIntent(
+                                        context = context,
+                                        bookId = book?.id,
+                                        bookTitle = book?.title,
+                                        bookAuthor = book?.author,
+                                    )
+                                )
+                            },
+                            size = 38.dp,
+                            contentColor = if (isDark) ColorOrangeLight else MaterialTheme.colorScheme.primary,
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_gemini),
+                                contentDescription = "Gemini Cloud AI Companion",
+                                modifier = Modifier.size(19.dp),
+                            )
+                        }
+                    }
+
+                    GlassIconButton(
+                        onClick = { showSettingsDialog = true },
+                        size = 38.dp,
+                        contentColor = if (isDark) TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    ) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            modifier = Modifier.size(19.dp),
+                        )
+                    }
+                }
+            }
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceContainerLowest,
@@ -441,19 +492,17 @@ fun BookDetailScreen(
                     ),
                     shape = RoundedCornerShape(20.dp),
                 )
-                if (pane == DetailPane.Bookmarks) {
-                    Spacer(Modifier.weight(1f))
-                    GlassIconButton(
-                        onClick = { showBookmarkDialog = true },
-                        size = 40.dp,
-                        contentColor = ColorOrangeLight,
-                    ) {
-                        Icon(
-                            Icons.Default.BookmarkAdd,
-                            contentDescription = "Add bookmark",
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
+                Spacer(Modifier.weight(1f))
+                GlassIconButton(
+                    onClick = { showBookmarkDialog = true },
+                    size = 40.dp,
+                    contentColor = ColorOrangeLight,
+                ) {
+                    Icon(
+                        Icons.Default.BookmarkAdd,
+                        contentDescription = "Add bookmark",
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -646,7 +695,7 @@ fun BookDetailScreen(
                             isSuccess = true,
                             latencyMs = ipcStatus.latencyMs,
                             models = ipcStatus.models.ifEmpty { listOf(foundryModel) },
-                            message = "IPC Connected (${ipcStatus.latencyMs}ms)",
+                            message = ipcStatus.message.ifBlank { "IPC Connected (${ipcStatus.latencyMs}ms)" },
                         )
                     } else if (ipcStatus.isAppInstalled) {
                         LocalLlmClient.ConnectionStatus(
@@ -1214,20 +1263,38 @@ private fun ChapterList(
     listState: androidx.compose.foundation.lazy.LazyListState,
     modifier: Modifier = Modifier,
 ) {
-    LazyColumn(
-        state = listState,
-        modifier = modifier,
-        contentPadding = PaddingValues(bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        itemsIndexed(chapters, key = { _, item -> item.id }) { index, chapter ->
-            ChapterCard(
-                index = index,
-                chapter = chapter,
-                selected = chapter.id == currentChapterId,
-                onClick = { onSelect(index) },
-            )
+    val coroutineScope = rememberCoroutineScope()
+    val isDark = MaterialTheme.colorScheme.background == BgDeep
+
+    Box(modifier = modifier.fillMaxWidth()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(end = 10.dp),
+            contentPadding = PaddingValues(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            itemsIndexed(chapters, key = { _, item -> item.id }) { index, chapter ->
+                ChapterCard(
+                    index = index,
+                    chapter = chapter,
+                    selected = chapter.id == currentChapterId,
+                    onClick = { onSelect(index) },
+                )
+            }
         }
+
+        VerticalListScrollbar(
+            listState = listState,
+            coroutineScope = coroutineScope,
+            isDark = isDark,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .width(6.dp)
+                .padding(vertical = 4.dp),
+        )
     }
 }
 
@@ -1412,43 +1479,20 @@ private fun BookmarkList(
         return
     }
 
-    LazyColumn(
-        modifier = modifier,
-        contentPadding = PaddingValues(bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        items(bookmarks.size, key = { bookmarks[it].bookmark.id }) { index ->
-            val item = bookmarks[index]
-            val dismissState = rememberSwipeToDismissBoxState(
-                confirmValueChange = { value ->
-                    if (value == SwipeToDismissBoxValue.EndToStart) {
-                        onDelete(item)
-                        true
-                    } else {
-                        false
-                    }
-                },
-            )
-            SwipeToDismissBox(
-                state = dismissState,
-                backgroundContent = {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(MaterialTheme.colorScheme.errorContainer)
-                            .padding(horizontal = 20.dp),
-                        contentAlignment = Alignment.CenterEnd,
-                    ) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete bookmark",
-                            tint = MaterialTheme.colorScheme.onErrorContainer,
-                        )
-                    }
-                },
-                enableDismissFromStartToEnd = false,
-            ) {
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
+    Box(modifier = modifier.fillMaxWidth()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(end = 10.dp),
+            contentPadding = PaddingValues(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(bookmarks.size, key = { bookmarks[it].bookmark.id }) { index ->
+                val item = bookmarks[index]
                 Card(
                     onClick = { onSelect(item) },
                     shape = RoundedCornerShape(18.dp),
@@ -1553,5 +1597,16 @@ private fun BookmarkList(
                 }
             }
         }
+
+        VerticalListScrollbar(
+            listState = listState,
+            coroutineScope = coroutineScope,
+            isDark = isDark,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .width(6.dp)
+                .padding(vertical = 4.dp),
+        )
     }
 }

@@ -29,8 +29,8 @@ android {
         applicationId = "mn.blazeapps.foxplayer"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "2.0.0"
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
     }
 
@@ -61,7 +61,7 @@ android {
             isEnable = true
             reset()
             include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-            isUniversalApk = false
+            isUniversalApk = true
         }
     }
 
@@ -86,6 +86,20 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+
+    applicationVariants.all {
+        outputs.all {
+            val output = this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            if (output != null) {
+                val originalName = output.outputFileName
+                if (originalName.startsWith("app-")) {
+                    output.outputFileName = originalName.replaceFirst("app-", "FoxPlayer-")
+                } else if (originalName.startsWith("app.")) {
+                    output.outputFileName = originalName.replaceFirst("app.", "FoxPlayer.")
+                }
+            }
         }
     }
 }

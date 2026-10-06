@@ -74,6 +74,6 @@ class LocalChatPreferences(private val context: Context) {
         private const val KEY_FOUNDRY_MODEL = "foundry_local_model"
 
         const val DEFAULT_ENDPOINT = "http://127.0.0.1:8080/v1"
-        const val DEFAULT_MODEL = "qwen2.5-0.5b-instruct"
+        const val DEFAULT_MODEL = "qwen2.5-0.5b"
     }
 }
