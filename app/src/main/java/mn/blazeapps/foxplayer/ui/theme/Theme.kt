@@ -4,14 +4,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
+val LocalIsDarkTheme = staticCompositionLocalOf { false }
+
 private val DarkColors = darkColorScheme(
-    primary = ColorBlueVioletLight,
+    primary = NativeVioletLight,
     onPrimary = Color.White,
-    primaryContainer = ColorBlueVioletDim,
-    onPrimaryContainer = Color.White,
-    secondary = ColorOrange,
+    primaryContainer = PillBgDark,
+    onPrimaryContainer = NativeVioletLight,
+    secondary = ColorOrangeLight,
     onSecondary = Color.White,
     secondaryContainer = ColorOrangeDim,
     onSecondaryContainer = ColorOrangeLight,
@@ -20,17 +24,17 @@ private val DarkColors = darkColorScheme(
     tertiaryContainer = ColorPurpleDim,
     onTertiaryContainer = ColorBlueVioletSubtle,
     background = BgDeep,
-    onBackground = TextPrimary,
-    surface = BgMid,
-    onSurface = TextPrimary,
-    surfaceVariant = Color(0xFF161F45),
-    onSurfaceVariant = TextSecondary,
+    onBackground = TextLightPrimary,
+    surface = CardDark,
+    onSurface = TextLightPrimary,
+    surfaceVariant = PillBgDark,
+    onSurfaceVariant = TextLightSecondary,
     surfaceContainerLowest = BgDeep,
     surfaceContainerLow = BgMid,
     surfaceContainer = Color(0xFF101736),
     surfaceContainerHigh = Color(0xFF161F45),
     surfaceContainerHighest = Color(0xFF1E2958),
-    outline = GlassBorder,
+    outline = BorderDark,
     outlineVariant = GlassBorderSubtle,
     error = ColorRed,
     onError = Color.White,
@@ -39,38 +43,40 @@ private val DarkColors = darkColorScheme(
 )
 
 private val LightColors = lightColorScheme(
-    primary = ColorBlueViolet,
+    primary = NativeViolet,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFEEF2FF),
-    onPrimaryContainer = Color(0xFF3730A3),
+    primaryContainer = PillBgLight,
+    onPrimaryContainer = NativeViolet,
     secondary = ColorOrange,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFFFEDD5),
-    onSecondaryContainer = Color(0xFF9A3412),
-    tertiary = ColorPurple,
+    secondaryContainer = CatAmberBg,
+    onSecondaryContainer = CatAmberIcon,
+    tertiary = CatRoseIcon,
     onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFF3E8FF),
-    onTertiaryContainer = Color(0xFF5B21B6),
-    background = Color(0xFFF8FAFC),
-    onBackground = Color(0xFF0F172A),
-    surface = Color(0xFFF8FAFC),
-    onSurface = Color(0xFF0F172A),
-    surfaceVariant = Color(0xFFF1F5F9),
-    onSurfaceVariant = Color(0xFF475569),
-    surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Color(0xFFF8FAFC),
-    surfaceContainer = Color(0xFFF1F5F9),
-    surfaceContainerHigh = Color(0xFFE2E8F0),
-    surfaceContainerHighest = Color(0xFFCBD5E1),
-    outline = Color(0xFFCBD5E1),
-    outlineVariant = Color(0xFFE2E8F0),
+    tertiaryContainer = CatRoseBg,
+    onTertiaryContainer = CatRoseIcon,
+    background = PastelBgBottom,
+    onBackground = TextDarkPrimary,
+    surface = CardWhite,
+    onSurface = TextDarkPrimary,
+    surfaceVariant = PillBgLight,
+    onSurfaceVariant = TextDarkSecondary,
+    surfaceContainerLowest = CardWhite,
+    surfaceContainerLow = PastelBgBottom,
+    surfaceContainer = PillBgLight,
+    surfaceContainerHigh = BorderLight,
+    surfaceContainerHighest = BorderLightSubtle,
+    outline = BorderLight,
+    outlineVariant = BorderLightSubtle,
     error = ColorRed,
     onError = Color.White,
+    errorContainer = CatRoseBg,
+    onErrorContainer = ColorRed,
 )
 
 @Composable
 fun FoxPlayerTheme(
-    themeMode: ThemeMode = ThemeMode.DARK,
+    themeMode: ThemeMode = ThemeMode.LIGHT, // Defaults to Light mode matching NativeOffice
     content: @Composable () -> Unit,
 ) {
     val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
@@ -81,10 +87,12 @@ fun FoxPlayerTheme(
     }
     val colorScheme = if (isDark) DarkColors else LightColors
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = FoxTypography,
-        shapes = FoxShapes,
-        content = content,
-    )
+    CompositionLocalProvider(LocalIsDarkTheme provides isDark) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = FoxTypography,
+            shapes = FoxShapes,
+            content = content,
+        )
+    }
 }

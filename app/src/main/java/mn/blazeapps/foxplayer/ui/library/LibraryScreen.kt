@@ -109,6 +109,11 @@ import mn.blazeapps.foxplayer.data.ai.LocalChatEngineMode
 import mn.blazeapps.foxplayer.data.ai.LocalLlmClient
 import mn.blazeapps.foxplayer.ui.settings.SettingsDialog
 import mn.blazeapps.foxplayer.ui.theme.ThemeMode
+import androidx.compose.material.icons.filled.NightsStay
+import mn.blazeapps.foxplayer.ui.theme.BorderLight
+import mn.blazeapps.foxplayer.ui.theme.CardWhite
+import mn.blazeapps.foxplayer.ui.theme.LocalIsDarkTheme
+import mn.blazeapps.foxplayer.ui.theme.NativeViolet
 import mn.blazeapps.foxplayer.FoxPlayerApplication
 import java.io.File
 
@@ -145,7 +150,7 @@ fun LibraryScreen(
     var pendingDelete by remember { mutableStateOf<LibraryBook?>(null) }
     var showThemePicker by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
-    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val isDark = LocalIsDarkTheme.current
 
     LaunchedEffect(message) {
         val text = message ?: return@LaunchedEffect
@@ -183,14 +188,14 @@ fun LibraryScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { showThemePicker = true }) {
+                        IconButton(onClick = {
+                            val nextMode = if (isDark) ThemeMode.LIGHT else ThemeMode.DARK
+                            onThemeModeChange(nextMode)
+                        }) {
                             Icon(
-                                imageVector = if (themeMode == ThemeMode.DARK) {
-                                    Icons.Default.LightMode
-                                } else {
-                                    Icons.Default.DarkMode
-                                },
-                                contentDescription = "Change theme",
+                                imageVector = if (isDark) Icons.Default.LightMode else Icons.Default.NightsStay,
+                                contentDescription = "Toggle theme",
+                                tint = if (isDark) Color(0xFFFFB74D) else NativeViolet,
                             )
                         }
                         IconButton(onClick = { showSettingsDialog = true }) {
@@ -479,7 +484,7 @@ private fun LibraryControls(
 ) {
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
-    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val isDark = LocalIsDarkTheme.current
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -488,12 +493,9 @@ private fun LibraryControls(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(28.dp))
-                .then(
-                    if (isDark) {
-                        Modifier.border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(28.dp))
-                    } else {
-                        Modifier
-                    },
+                .border(
+                    BorderStroke(1.dp, if (isDark) GlassBorder else BorderLight),
+                    RoundedCornerShape(28.dp),
                 ),
         ) {
             TextField(
@@ -542,8 +544,8 @@ private fun LibraryControls(
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     disabledIndicatorColor = Color.Transparent,
-                    focusedContainerColor = if (isDark) InputBg else MaterialTheme.colorScheme.surfaceContainerHighest,
-                    unfocusedContainerColor = if (isDark) InputBg else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    focusedContainerColor = if (isDark) InputBg else CardWhite,
+                    unfocusedContainerColor = if (isDark) InputBg else CardWhite,
                 ),
             )
         }
@@ -711,15 +713,15 @@ private fun BookCard(
 ) {
     val percent = item.progressPercent
     val shape = RoundedCornerShape(18.dp)
-    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val isDark = LocalIsDarkTheme.current
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = if (isDark) GlassBg else MaterialTheme.colorScheme.surfaceContainerLowest,
+            containerColor = if (isDark) GlassBg else CardWhite,
         ),
         shape = shape,
         border = BorderStroke(
             1.dp,
-            if (isDark) GlassBorder else MaterialTheme.colorScheme.outlineVariant,
+            if (isDark) GlassBorder else BorderLight,
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),

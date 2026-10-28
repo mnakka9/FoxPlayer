@@ -7,7 +7,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -17,7 +16,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import mn.blazeapps.foxplayer.FoxPlayerApplication
 import mn.blazeapps.foxplayer.ui.theme.FoxPlayerTheme
 import mn.blazeapps.foxplayer.ui.theme.GlassBackground
-import mn.blazeapps.foxplayer.ui.theme.ThemeMode
 
 class GeminiChatActivity : ComponentActivity() {
     private val viewModel: GeminiViewModel by viewModels()
@@ -35,12 +33,6 @@ class GeminiChatActivity : ComponentActivity() {
         val app = application as FoxPlayerApplication
         setContent {
             val themeMode by app.container.themePreferences.mode.collectAsStateWithLifecycle()
-            val isSystemDark = isSystemInDarkTheme()
-            val isDark = when (themeMode) {
-                ThemeMode.DARK -> true
-                ThemeMode.LIGHT -> false
-                ThemeMode.SYSTEM -> isSystemDark
-            }
 
             FoxPlayerTheme(themeMode = themeMode) {
                 Surface(
@@ -48,14 +40,7 @@ class GeminiChatActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background,
                     contentColor = MaterialTheme.colorScheme.onBackground,
                 ) {
-                    if (isDark) {
-                        GlassBackground {
-                            GeminiChatScreen(
-                                viewModel = viewModel,
-                                onBack = { finish() },
-                            )
-                        }
-                    } else {
+                    GlassBackground {
                         GeminiChatScreen(
                             viewModel = viewModel,
                             onBack = { finish() },

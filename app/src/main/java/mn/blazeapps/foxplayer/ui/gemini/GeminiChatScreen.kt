@@ -37,6 +37,7 @@ import mn.blazeapps.foxplayer.data.auth.AuthState
 import mn.blazeapps.foxplayer.data.gemini.GeminiChatMessage
 import mn.blazeapps.foxplayer.data.gemini.MessageSender
 import mn.blazeapps.foxplayer.ui.theme.*
+import mn.blazeapps.foxplayer.ui.theme.LocalIsDarkTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,7 +61,7 @@ fun GeminiChatScreen(
     var showModelSelector by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
-    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val isDark = LocalIsDarkTheme.current
 
     // Scroll to bottom as messages stream in
     LaunchedEffect(messages.size, messages.lastOrNull()?.text?.length) {

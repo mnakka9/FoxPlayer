@@ -57,6 +57,7 @@ import mn.blazeapps.foxplayer.data.ai.ChatSender
 import mn.blazeapps.foxplayer.data.ai.ChatSource
 import mn.blazeapps.foxplayer.data.ai.LocalChatEngineMode
 import mn.blazeapps.foxplayer.ui.theme.*
+import mn.blazeapps.foxplayer.ui.theme.LocalIsDarkTheme
 
 @Composable
 fun BookAiChatDialog(
@@ -68,7 +69,7 @@ fun BookAiChatDialog(
     engineMode: LocalChatEngineMode = LocalChatEngineMode.FAST_LOCAL,
     onDismiss: () -> Unit,
 ) {
-    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val isDark = LocalIsDarkTheme.current
     var inputText by remember { mutableStateOf("") }
     var selectedScope by remember { mutableStateOf<ChatQueryScope>(ChatQueryScope.AUTO) }
     val listState = rememberLazyListState()

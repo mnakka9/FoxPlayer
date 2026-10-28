@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import mn.blazeapps.foxplayer.data.gemini.GeminiModelInfo
 import mn.blazeapps.foxplayer.ui.theme.*
+import mn.blazeapps.foxplayer.ui.theme.LocalIsDarkTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,7 +37,7 @@ fun ModelSelectorBottomSheet(
     onRefreshModels: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val isDark = LocalIsDarkTheme.current
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,

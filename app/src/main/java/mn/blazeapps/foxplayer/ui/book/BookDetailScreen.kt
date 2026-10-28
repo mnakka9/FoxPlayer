@@ -53,6 +53,10 @@ import coil.compose.AsyncImage
 import mn.blazeapps.foxplayer.data.onnx.ModelDownloadState
 import mn.blazeapps.foxplayer.data.onnx.EnrichedBookMetadata
 import mn.blazeapps.foxplayer.ui.theme.BgDeep
+import mn.blazeapps.foxplayer.ui.theme.LocalIsDarkTheme
+import mn.blazeapps.foxplayer.ui.theme.BorderLight
+import mn.blazeapps.foxplayer.ui.theme.CardWhite
+import mn.blazeapps.foxplayer.ui.theme.NativeViolet
 import mn.blazeapps.foxplayer.ui.theme.BgMid
 import mn.blazeapps.foxplayer.ui.theme.ColorBlueViolet
 import mn.blazeapps.foxplayer.ui.theme.ColorBlueVioletDim
@@ -135,7 +139,7 @@ import mn.blazeapps.foxplayer.ui.gemini.GeminiChatActivity
 fun BookDetailScreen(
     bookId: Long,
     viewModel: BookViewModel,
-    themeMode: ThemeMode = ThemeMode.DARK,
+    themeMode: ThemeMode = ThemeMode.LIGHT,
     onThemeModeChange: (ThemeMode) -> Unit = {},
     onBack: () -> Unit,
     onRestoreAccess: () -> Unit,
@@ -193,7 +197,7 @@ fun BookDetailScreen(
         chapterListState.animateScrollToItem(chapterIndex)
     }
 
-    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val isDark = LocalIsDarkTheme.current
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -745,7 +749,7 @@ private fun EnrichMetadataDialog(
     onApply: (genres: String?, description: String?, coverUrl: String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val isDark = LocalIsDarkTheme.current
     var searchQuery by remember { mutableStateOf(bookTitle) }
     var isAnalyzing by remember { mutableStateOf(false) }
     var enrichedResult by remember { mutableStateOf<EnrichedBookMetadata?>(null) }
@@ -1116,7 +1120,7 @@ private fun PlayerControls(
     onForward: () -> Unit,
     onSpeed: (Float) -> Unit,
 ) {
-    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val isDark = LocalIsDarkTheme.current
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -1181,7 +1185,7 @@ private fun SpeedSlider(
     onSpeed: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val isDark = LocalIsDarkTheme.current
     var dragging by remember { mutableFloatStateOf(-1f) }
     val current = if (dragging > 0f) dragging else speed
     val formattedSpeed = String.format(java.util.Locale.US, "%.2fx", current)
@@ -1264,7 +1268,7 @@ private fun ChapterList(
     modifier: Modifier = Modifier,
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val isDark = LocalIsDarkTheme.current
 
     Box(modifier = modifier.fillMaxWidth()) {
         LazyColumn(
@@ -1306,7 +1310,7 @@ private fun ChapterCard(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val isDark = LocalIsDarkTheme.current
     val gradient = Brush.linearGradient(
         colors = listOf(
             ColorBlueViolet,
@@ -1435,7 +1439,7 @@ private fun BookmarkList(
     onDelete: (BookmarkWithChapter) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val isDark = LocalIsDarkTheme.current
     if (bookmarks.isEmpty()) {
         Box(
             modifier = modifier

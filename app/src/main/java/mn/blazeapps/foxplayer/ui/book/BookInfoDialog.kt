@@ -31,6 +31,7 @@ import androidx.compose.ui.window.DialogProperties
 import mn.blazeapps.foxplayer.data.ai.BookSeriesAndAuthorInfo
 import mn.blazeapps.foxplayer.data.entities.BookEntity
 import mn.blazeapps.foxplayer.ui.theme.*
+import mn.blazeapps.foxplayer.ui.theme.LocalIsDarkTheme
 
 @Composable
 fun BookInfoDialog(
@@ -41,7 +42,7 @@ fun BookInfoDialog(
     onAddBookmarkNote: (String) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
-    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val isDark = LocalIsDarkTheme.current
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
 

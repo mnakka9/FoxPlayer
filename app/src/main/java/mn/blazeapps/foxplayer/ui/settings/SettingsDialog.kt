@@ -30,6 +30,7 @@ import mn.blazeapps.foxplayer.data.ai.LocalChatPreferences
 import mn.blazeapps.foxplayer.data.ai.LocalLlmClient
 import mn.blazeapps.foxplayer.data.onnx.ModelDownloadState
 import mn.blazeapps.foxplayer.ui.theme.*
+import mn.blazeapps.foxplayer.ui.theme.LocalIsDarkTheme
 import java.util.Locale
 
 @Composable
@@ -58,7 +59,7 @@ fun SettingsDialog(
     onRescanChapters: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
-    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val isDark = LocalIsDarkTheme.current
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     var isFoundryAppInstalled by remember { mutableStateOf(FoundryIpcManager.isFoundryAppInstalled(context)) }

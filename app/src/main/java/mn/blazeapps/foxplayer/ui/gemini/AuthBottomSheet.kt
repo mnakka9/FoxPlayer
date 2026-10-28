@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import mn.blazeapps.foxplayer.data.auth.AuthState
 import mn.blazeapps.foxplayer.ui.theme.*
+import mn.blazeapps.foxplayer.ui.theme.LocalIsDarkTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,7 +49,7 @@ fun AuthBottomSheet(
     var isSubmitting by remember { mutableStateOf(false) }
     var selectedAuthTab by remember { mutableIntStateOf(0) } // 0: Gmail, 1: API Key
 
-    val isDark = MaterialTheme.colorScheme.background == BgDeep
+    val isDark = LocalIsDarkTheme.current
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
